@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { SettingsPage } from '../components/settings-page'
 import type { SiteSettings } from '../types'
+import { DEFAULT_SERVER_ADDRESS, DEFAULT_SYSTEM_NAME } from '@/lib/constants'
 import {
   SITE_DEFAULT_SECTION,
   getSiteSectionContent,
@@ -26,12 +27,12 @@ import {
 
 const defaultSiteSettings: SiteSettings = {
   Notice: '',
-  SystemName: 'New API',
+  SystemName: DEFAULT_SYSTEM_NAME,
   Logo: '',
   Footer: '',
   About: '',
   HomePageContent: '',
-  ServerAddress: '',
+  ServerAddress: DEFAULT_SERVER_ADDRESS,
   TaskPublicAddress: '',
   'general_setting.docs_link': '',
   'legal.user_agreement': '',

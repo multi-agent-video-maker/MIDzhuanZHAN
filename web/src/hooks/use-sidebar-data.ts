@@ -20,6 +20,7 @@ import {
   Activity,
   Box,
   ClipboardList,
+  Calculator,
   CreditCard,
   FileText,
   FlaskConical,
@@ -157,6 +158,12 @@ export function useSidebarData(badges: SidebarBadges = {}): SidebarData {
             title: t('Subscriptions'),
             url: '/subscriptions',
             icon: CreditCard,
+          },
+          {
+            title: t('Finance Accounting'),
+            url: '/finance',
+            icon: Calculator,
+            requiredRole: ROLE.ADMIN,
           },
           {
             title: t('System Info'),

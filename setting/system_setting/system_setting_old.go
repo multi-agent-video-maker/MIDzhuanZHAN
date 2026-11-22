@@ -1,6 +1,6 @@
 package system_setting
 
-var ServerAddress = "http://localhost:3000"
+var ServerAddress = "https://allfun.api"
 var TaskPublicAddress = ""
 var WorkerUrl = ""
 var WorkerValidKey = ""

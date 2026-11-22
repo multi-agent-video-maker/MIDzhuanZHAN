@@ -177,12 +177,14 @@ docker run --name new-api -d --restart unless-stopped \
 
 打开 [http://localhost:3000](http://localhost:3000)，按初始化向导创建管理员账号。SQLite 数据库存放在挂载的 `data` 目录中，更换容器后仍会保留。
 
+生产环境默认品牌为 **Allfun.api**，对外服务地址使用 `https://allfun.api`。部署到其他域名时，在管理员的「系统设置 → 站点」中修改 Server Address 和异步任务公开地址。
+
 ### 发起第一次请求
 
 1. 新建渠道，填写上游 API Key、可用模型和所属分组，执行渠道测试。
 2. 配置模型价格，确保调用用户有可用额度或有效订阅。
 3. 在控制台创建 API Key，确保它能访问对应分组和模型。
-4. 对于 OpenAI 兼容客户端，将 Base URL 设为 `http://localhost:3000/v1`，密钥使用 **New API 签发的 Key**。
+4. 对于 OpenAI 兼容客户端，生产环境将 Base URL 设为 `https://allfun.api/v1`，本地开发仍使用 `http://localhost:3000/v1`，密钥使用 **Allfun.api 签发的 Key**。
 
 在终端中将 `NEW_API_KEY` 环境变量设为该密钥，查询它可以访问的模型：
 

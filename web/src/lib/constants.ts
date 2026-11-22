@@ -21,7 +21,8 @@ For commercial licensing, please contact support@quantumnous.com
  */
 
 // System Configuration Defaults
-export const DEFAULT_SYSTEM_NAME = '中转站'
+export const DEFAULT_SYSTEM_NAME = 'Allfun.api'
+export const DEFAULT_SERVER_ADDRESS = 'https://allfun.api'
 export const DEFAULT_LOGO = '/logo.png'
 
 // LocalStorage Keys
