@@ -24,20 +24,20 @@ export function Logo({ className, ...props }: SVGProps<SVGSVGElement>) {
   return (
     <svg
       id='newapi-logo'
-      viewBox='0 0 24 24'
+      viewBox='0 0 64 64'
       xmlns='http://www.w3.org/2000/svg'
-      height='24'
-      width='24'
+      height='64'
+      width='64'
       fill='none'
-      stroke='currentColor'
-      strokeWidth='2'
-      strokeLinecap='round'
-      strokeLinejoin='round'
       className={cn('size-6', className)}
       {...props}
     >
       <title>Allfun.api</title>
-      <path d='M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3' />
+      <rect width='64' height='64' rx='18' fill='#0B111B' />
+      <path d='M13 48 28.7 15h6.4L51 48h-8.2l-3.3-7.8H23.7L20.9 48H13Z' fill='#F4B04E' />
+      <path d='M27.2 33.7h9.4l-4.7-11-4.7 11Z' fill='#0B111B' />
+      <path d='m38.7 16.3 9.8 6.8-4.2 6.1-9.7-6.7 4.1-6.2Z' fill='#F06B63' />
+      <path d='M43.3 39.6h7.6L54 48h-8.2l-2.5-8.4Z' fill='#F06B63' />
     </svg>
   )
 }

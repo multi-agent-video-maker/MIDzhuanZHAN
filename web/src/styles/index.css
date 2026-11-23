@@ -47,6 +47,34 @@ For commercial licensing, please contact support@quantumnous.com
 
 /* Shiki dual themes: token colors follow dark theme (pre background stays `bg-background` on the block) */
 @layer components {
+  .setup-wizard-glow {
+    position: absolute;
+    z-index: 0;
+    width: 22rem;
+    height: 22rem;
+    border-radius: 9999px;
+    filter: blur(80px);
+    pointer-events: none;
+    opacity: 0.12;
+  }
+
+  .setup-wizard-glow-one {
+    top: -10rem;
+    right: -6rem;
+    background: var(--primary);
+  }
+
+  .setup-wizard-glow-two {
+    bottom: -12rem;
+    left: -8rem;
+    background: var(--destructive);
+    opacity: 0.08;
+  }
+
+  .setup-wizard-card {
+    backdrop-filter: blur(12px);
+  }
+
   .shiki span {
     color: var(--shiki-light) !important;
     font-style: var(--shiki-light-font-style) !important;

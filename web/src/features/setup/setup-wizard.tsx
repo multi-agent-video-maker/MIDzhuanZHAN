@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
+import { Database, Settings2, ShieldCheck, Sparkles } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
@@ -54,18 +55,22 @@ const STEPS = [
   {
     titleKey: 'Database check',
     descriptionKey: 'Verify your database connection',
+    icon: Database,
   },
   {
     titleKey: 'Administrator account',
     descriptionKey: 'Create credentials for the root user',
+    icon: ShieldCheck,
   },
   {
     titleKey: 'Usage mode',
     descriptionKey: 'Choose how the platform will operate',
+    icon: Settings2,
   },
   {
     titleKey: 'Review & initialize',
     descriptionKey: 'Confirm settings and finish setup',
+    icon: Sparkles,
   },
 ]
 
@@ -282,88 +287,133 @@ export function SetupWizard() {
     mutation.mutate(payload)
   }
 
+  const currentStepMeta = STEPS[currentStep]
+  const progress = ((currentStep + 1) / STEPS.length) * 100
+
   return (
-    <div className='bg-muted/40 relative min-h-svh py-10'>
-      <div className='absolute top-4 right-4 sm:top-6 sm:right-6'>
-        <LanguageSwitcher />
-      </div>
-      <div className='container mx-auto flex max-w-5xl flex-col gap-8 px-4 sm:px-6'>
-        <div className='flex flex-col items-center gap-3'>
-          <div className='relative h-12 w-12'>
+    <div className='relative min-h-svh overflow-hidden bg-background text-foreground'>
+      <div className='setup-wizard-glow setup-wizard-glow-one' aria-hidden='true' />
+      <div className='setup-wizard-glow setup-wizard-glow-two' aria-hidden='true' />
+      <header className='relative z-10 flex items-center justify-between px-5 py-5 sm:px-8 lg:px-12'>
+        <div className='flex items-center gap-3'>
+          <div className='flex size-10 items-center justify-center overflow-hidden rounded-xl border border-border bg-card shadow-sm'>
             {systemConfigLoading ? (
-              <Skeleton className='absolute inset-0 rounded-full' />
+              <Skeleton className='size-full rounded-xl' />
             ) : (
               <img
                 src={logo}
                 alt={t('System logo')}
-                className='h-12 w-12 rounded-full object-cover shadow-sm'
+                className='size-full object-cover'
               />
             )}
           </div>
-          {systemConfigLoading ? (
-            <Skeleton className='h-7 w-40' />
-          ) : (
-            <h1 className='text-2xl font-semibold tracking-tight'>
-              {t('Initialize')} {systemName}
-            </h1>
-          )}
-          <p className='text-muted-foreground text-center text-sm sm:text-base'>
-            {t(
-              'Follow the guided steps to prepare your workspace before the first login.'
+          <div className='leading-tight'>
+            {systemConfigLoading ? (
+              <Skeleton className='h-4 w-24' />
+            ) : (
+              <p className='text-sm font-semibold tracking-tight'>{systemName}</p>
             )}
-          </p>
-        </div>
-
-        <Card className='shadow-lg'>
-          <CardHeader className='space-y-2'>
-            <CardTitle className='text-xl font-semibold'>
+            <p className='text-muted-foreground mt-1 text-xs'>
               {t('System setup wizard')}
-            </CardTitle>
-            <CardDescription>
-              {t('Complete these steps to finish the initial installation.')}
-            </CardDescription>
+            </p>
+          </div>
+        </div>
+        <LanguageSwitcher />
+      </header>
+
+      <main className='relative z-10 mx-auto grid max-w-6xl gap-6 px-5 pb-8 sm:px-8 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-10 lg:px-12 lg:pb-12'>
+        <aside className='flex flex-col justify-between gap-8 py-2 lg:min-h-[640px] lg:py-8'>
+          <div>
+            <p className='text-primary text-sm font-semibold'>{t('Initialize')}</p>
+            {systemConfigLoading ? (
+              <Skeleton className='mt-4 h-12 w-56' />
+            ) : (
+              <h1 className='mt-4 max-w-xs text-4xl font-semibold tracking-[-0.04em] sm:text-5xl'>
+                {systemName}
+              </h1>
+            )}
+            <p className='text-muted-foreground mt-5 max-w-sm text-sm leading-6'>
+              {t(
+                'Follow the guided steps to prepare your workspace before the first login.'
+              )}
+            </p>
+          </div>
+
+          <ol className='grid gap-2 sm:grid-cols-4 lg:grid-cols-1'>
+            {STEPS.map((step, index) => {
+              const isActive = currentStep === index
+              const isCompleted = currentStep > index
+              const StepIcon = step.icon
+              return (
+                <li key={step.titleKey}>
+                  <div
+                    className={cn(
+                      'flex items-center gap-3 rounded-2xl border px-3 py-3 transition-colors',
+                      isActive && 'border-primary/60 bg-primary/10',
+                      isCompleted && !isActive && 'border-success/30 bg-success/5',
+                      !isActive && !isCompleted && 'border-border/70 bg-card/40'
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'flex size-9 shrink-0 items-center justify-center rounded-xl border',
+                        isActive && 'border-primary bg-primary text-primary-foreground',
+                        isCompleted && !isActive && 'border-success/50 text-success',
+                        !isActive && !isCompleted && 'border-border text-muted-foreground'
+                      )}
+                    >
+                      {isCompleted ? (
+                        <ShieldCheck className='size-4' aria-hidden='true' />
+                      ) : (
+                        <StepIcon className='size-4' aria-hidden='true' />
+                      )}
+                    </span>
+                    <span className='min-w-0'>
+                      <span className='block truncate text-sm font-semibold'>
+                        {t(step.titleKey)}
+                      </span>
+                      <span className='text-muted-foreground mt-0.5 block truncate text-xs'>
+                        {t(step.descriptionKey)}
+                      </span>
+                    </span>
+                  </div>
+                </li>
+              )
+            })}
+          </ol>
+        </aside>
+
+        <Card className='setup-wizard-card self-start border-border/80 bg-card/95 shadow-2xl shadow-black/10 dark:shadow-black/30'>
+          <CardHeader className='gap-5 border-b border-border/70 px-5 py-5 sm:px-8 sm:py-7'>
+            <div className='flex items-start justify-between gap-5'>
+              <div>
+                <CardTitle className='text-2xl font-semibold tracking-tight sm:text-3xl'>
+                  {t(currentStepMeta.titleKey)}
+                </CardTitle>
+                <CardDescription className='mt-2 max-w-xl text-sm leading-6'>
+                  {t(currentStepMeta.descriptionKey)}
+                </CardDescription>
+              </div>
+              <span className='bg-primary/10 text-primary shrink-0 rounded-full px-3 py-1 text-xs font-semibold tabular-nums'>
+                {currentStep + 1}/{STEPS.length}
+              </span>
+            </div>
+            <div
+              className='bg-muted h-1.5 overflow-hidden rounded-full'
+              role='progressbar'
+              aria-label={t('System setup wizard')}
+              aria-valuemin={1}
+              aria-valuemax={STEPS.length}
+              aria-valuenow={currentStep + 1}
+            >
+              <div
+                className='bg-primary h-full rounded-full transition-[width] duration-300 ease-out'
+                style={{ width: `${progress}%` }}
+              />
+            </div>
           </CardHeader>
 
-          <CardContent className='space-y-6'>
-            <ol className='grid gap-3 sm:grid-cols-4'>
-              {STEPS.map((step, index) => {
-                const isActive = currentStep === index
-                const isCompleted = currentStep > index
-                return (
-                  <li
-                    key={step.titleKey}
-                    className={cn('rounded-xl border p-3', {
-                      'border-primary ring-primary/20 ring-2': isActive,
-                      'border-primary/40 bg-primary/5':
-                        !isActive && isCompleted,
-                      'border-muted bg-card': !isActive && !isCompleted,
-                    })}
-                  >
-                    <div className='flex items-start gap-3'>
-                      <span
-                        className={cn(
-                          'flex size-6 items-center justify-center rounded-md border text-xs font-semibold',
-                          isActive || isCompleted
-                            ? 'border-primary bg-primary text-primary-foreground'
-                            : 'border-muted-foreground/40 text-muted-foreground'
-                        )}
-                      >
-                        {index + 1}
-                      </span>
-                      <div className='space-y-1'>
-                        <p className='text-sm font-semibold'>
-                          {t(step.titleKey)}
-                        </p>
-                        <p className='text-muted-foreground text-xs'>
-                          {t(step.descriptionKey)}
-                        </p>
-                      </div>
-                    </div>
-                  </li>
-                )
-              })}
-            </ol>
-
+          <CardContent className='px-5 py-6 sm:px-8 sm:py-8'>
             {isLoading && <LoadingState message={t('Loading setup status…')} />}
             {!isLoading && isError && (
               <ErrorState
@@ -374,7 +424,7 @@ export function SetupWizard() {
             {!isLoading && !isError && (
               <Form {...form}>
                 <form
-                  className='space-y-6'
+                  className='min-h-56 space-y-6'
                   onSubmit={(event) => event.preventDefault()}
                 >
                   {currentStepComponent}
@@ -384,7 +434,7 @@ export function SetupWizard() {
           </CardContent>
 
           {!isLoading && !isError && (
-            <CardFooter className='w-full justify-end border-t'>
+            <CardFooter className='w-full border-t border-border/70 bg-muted/30 px-5 py-4 sm:px-8'>
               <StepNavigation
                 currentStep={currentStep}
                 totalSteps={STEPS.length}
@@ -396,7 +446,7 @@ export function SetupWizard() {
             </CardFooter>
           )}
         </Card>
-      </div>
+      </main>
     </div>
   )
 }
