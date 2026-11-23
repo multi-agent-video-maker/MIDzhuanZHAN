@@ -23,7 +23,6 @@ import {
   Calculator,
   CreditCard,
   FileText,
-  FlaskConical,
   Key,
   LayoutDashboard,
   ListTodo,
@@ -59,11 +58,6 @@ export function useSidebarData(badges: SidebarBadges = {}): SidebarData {
         id: 'chat',
         title: t('Chat'),
         items: [
-          {
-            title: t('Playground'),
-            url: '/playground',
-            icon: FlaskConical,
-          },
           {
             title: t('Chat'),
             icon: MessageSquare,
