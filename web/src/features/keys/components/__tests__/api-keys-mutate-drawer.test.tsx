@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import type { ApiKey } from '../../types'
@@ -48,23 +49,36 @@ const apiClient = api as unknown as MockableApi
 const originalGet = apiClient.get
 const originalPost = apiClient.post
 let renderedDrawer: RenderedDrawer | null = null
+const groups = {
+  auto: { desc: 'Automatic routing', ratio: 'auto' },
+  default: { desc: 'Standard access', ratio: 1 },
+  vip: { desc: 'Priority access', ratio: 2 },
+  'seedance-2.0': { desc: 'Seedance 2.0', ratio: 1 },
+  'seedance-2.5': { desc: 'Seedance 2.5', ratio: 1 },
+}
+const seedanceModels = [
+  'doubao-seedance-2-0-260128',
+  'doubao-seedance-2-5-260628',
+]
 
 function installApiFixtures(createdPayloads: Array<Record<string, unknown>>) {
-  apiClient.get = async (url) => {
+  apiClient.get = async (url, config) => {
     switch (url) {
       case '/api/status':
         return { data: { data: { default_use_auto_group: true } } }
-      case '/api/user/models':
-        return { data: { success: true, data: [] } }
+      case '/api/user/models': {
+        const group = (config as { params?: { group?: string } } | undefined)
+          ?.params?.group
+        let models = seedanceModels
+        if (group === 'seedance-2.0') models = seedanceModels.slice(0, 1)
+        if (group === 'seedance-2.5') models = seedanceModels.slice(1)
+        return { data: { success: true, data: models } }
+      }
       case '/api/user/self/groups':
         return {
           data: {
             success: true,
-            data: {
-              auto: { desc: 'Automatic routing', ratio: 'auto' },
-              default: { desc: 'Standard access', ratio: 1 },
-              vip: { desc: 'Priority access', ratio: 2 },
-            },
+            data: groups,
           },
         }
       case '/api/token/auto-groups':
@@ -98,18 +112,14 @@ async function renderCreateDrawer(): Promise<void> {
   )
   queryClient.setQueryData(
     ['user-models'],
-    { success: true, data: [] },
+    { success: true, data: seedanceModels },
     { updatedAt: freshAt }
   )
   queryClient.setQueryData(
     ['user-groups'],
     {
       success: true,
-      data: {
-        auto: { desc: 'Automatic routing', ratio: 'auto' },
-        default: { desc: 'Standard access', ratio: 1 },
-        vip: { desc: 'Priority access', ratio: 2 },
-      },
+      data: groups,
     },
     { updatedAt: freshAt }
   )
@@ -279,6 +289,25 @@ describe('API keys mutate drawer Auto group integration', () => {
     await waitFor(() => expect(createdPayloads).toHaveLength(1))
     expect(createdPayloads[0]?.auto_groups).toEqual(['vip'])
   })
+})
+
+test('offers only the model routed by the selected Seedance group', async () => {
+  const user = userEvent.setup()
+  installApiFixtures([])
+  await renderCreateDrawer()
+
+  selectComboboxOption(getControlByLabel('Group'), 'Seedance 2.5')
+  fireEvent.click(findButton('Advanced Settings', true))
+  await user.click(
+    screen.getByPlaceholderText('Select models (empty for allow all)')
+  )
+
+  expect(
+    await screen.findByRole('option', { name: seedanceModels[1] })
+  ).toBeVisible()
+  expect(
+    screen.queryByRole('option', { name: seedanceModels[0] })
+  ).not.toBeInTheDocument()
 })
 
 describe('API key expiry across editing sessions', () => {

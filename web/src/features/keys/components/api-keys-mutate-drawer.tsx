@@ -118,14 +118,6 @@ export function ApiKeysMutateDrawer({
   )
   const defaultUseAutoGroup = status?.default_use_auto_group === true
 
-  // Fetch models
-  const { data: modelsData } = useQuery({
-    queryKey: ['user-models'],
-    queryFn: async () => requireServerSuccess(await getUserModels()),
-    enabled: open,
-    staleTime: 0,
-  })
-
   // Fetch groups
   const {
     data: groupsData,
@@ -161,7 +153,6 @@ export function ApiKeysMutateDrawer({
     staleTime: 0,
   })
 
-  const models = modelsData?.data || []
   const groups = useMemo<ApiKeyGroupOption[]>(
     () =>
       Object.entries(groupsData?.data || {}).map(([key, info]) => ({
@@ -268,6 +259,15 @@ export function ApiKeysMutateDrawer({
     isUpdate && currentRow ? `update:${currentRow.id}` : 'create'
   const isFormInitialized = initializedTarget === formTarget
   const selectedGroup = form.watch('group')
+  const modelGroup =
+    selectedGroup && selectedGroup !== 'auto' ? selectedGroup : undefined
+  const { data: modelsData } = useQuery({
+    queryKey: modelGroup ? ['user-models', modelGroup] : ['user-models'],
+    queryFn: async () => requireServerSuccess(await getUserModels(modelGroup)),
+    enabled: open && isFormInitialized,
+    staleTime: 0,
+  })
+  const models = modelsData?.data ?? []
 
   // Correct group after groups load: if the form value is not in available groups, fall back
   useEffect(() => {

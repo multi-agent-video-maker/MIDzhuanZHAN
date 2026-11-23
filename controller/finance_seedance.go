@@ -51,24 +51,39 @@ type seedanceFinanceLedger struct {
 }
 
 func GetSeedanceFinance(c *gin.Context) {
-	channelID, err := strconv.Atoi(os.Getenv("ALLFUN_SEEDANCE_CHANNEL_ID"))
-	if err != nil || channelID <= 0 {
+	configuredIDs := strings.TrimSpace(os.Getenv("ALLFUN_SEEDANCE_CHANNEL_IDS"))
+	if configuredIDs == "" {
+		configuredIDs = strings.TrimSpace(os.Getenv("ALLFUN_SEEDANCE_CHANNEL_ID"))
+	}
+	if configuredIDs == "" {
 		common.ApiSuccess(c, seedanceFinanceLedger{Records: []seedanceFinanceRecord{}})
 		return
 	}
 
-	channel, err := model.GetChannelById(channelID, true)
-	if err != nil || channel == nil ||
-		strings.TrimRight(channel.GetBaseURL(), "/") != seedanceFinanceOrigin ||
-		channel.ChannelInfo.IsMultiKey || !strings.HasPrefix(channel.Key, "sk-") ||
-		strings.ContainsAny(channel.Key, " \r\n\t") {
-		common.ApiErrorStatus(c, http.StatusServiceUnavailable, common.NewMessage("Refresh failed"))
-		return
+	var channelIDs []int
+	var ledgerKey string
+	for rawID := range strings.SplitSeq(configuredIDs, ",") {
+		channelID, err := strconv.Atoi(strings.TrimSpace(rawID))
+		if err != nil || channelID <= 0 {
+			common.ApiErrorStatus(c, http.StatusServiceUnavailable, common.NewMessage("Refresh failed"))
+			return
+		}
+		channel, err := model.GetChannelById(channelID, true)
+		if err != nil || channel == nil ||
+			strings.TrimRight(channel.GetBaseURL(), "/") != seedanceFinanceOrigin ||
+			channel.ChannelInfo.IsMultiKey || !strings.HasPrefix(channel.Key, "sk-") ||
+			strings.ContainsAny(channel.Key, " \r\n\t") ||
+			(ledgerKey != "" && channel.Key != ledgerKey) {
+			common.ApiErrorStatus(c, http.StatusServiceUnavailable, common.NewMessage("Refresh failed"))
+			return
+		}
+		ledgerKey = channel.Key
+		channelIDs = append(channelIDs, channelID)
 	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 12*time.Second)
 	defer cancel()
-	tasks, err := settledSeedanceFinanceTasks(ctx, model.DB, channelID)
+	tasks, err := settledSeedanceFinanceTasks(ctx, model.DB, channelIDs)
 	if err != nil {
 		common.ApiErrorStatus(c, http.StatusServiceUnavailable, common.NewMessage("Refresh failed"))
 		return
@@ -98,7 +113,7 @@ func GetSeedanceFinance(c *gin.Context) {
 		!upstreamStatus.Success || upstreamStatus.Data.DisplayType != "CNY" ||
 		!(upstreamStatus.Data.QuotaPerUnit > 0) || !(upstreamStatus.Data.ExchangeRate > 0) ||
 		!(operation_setting.USDExchangeRate > 0) || !(common.QuotaPerUnit > 0) ||
-		!readSeedanceFinanceJSON(ctx, &client, "/api/log/token", channel.Key, &upstreamLogs) ||
+		!readSeedanceFinanceJSON(ctx, &client, "/api/log/token", ledgerKey, &upstreamLogs) ||
 		!upstreamLogs.Success {
 		common.ApiErrorStatus(c, http.StatusBadGateway, common.NewMessage("Refresh failed"))
 		return
@@ -113,11 +128,11 @@ func GetSeedanceFinance(c *gin.Context) {
 	common.ApiSuccess(c, ledger)
 }
 
-func settledSeedanceFinanceTasks(ctx context.Context, db *gorm.DB, channelID int) ([]*model.Task, error) {
+func settledSeedanceFinanceTasks(ctx context.Context, db *gorm.DB, channelIDs []int) ([]*model.Task, error) {
 	var tasks []*model.Task
 	err := db.WithContext(ctx).
 		Select("task_id", "properties", "private_data", "quota").
-		Where("channel_id = ? AND status = ?", channelID, model.TaskStatusSuccess).
+		Where("channel_id IN ? AND status = ?", channelIDs, model.TaskStatusSuccess).
 		Order("id DESC").
 		Limit(seedanceFinanceLimit + 1).
 		Find(&tasks).Error

@@ -45,15 +45,18 @@ func TestSeedanceFinanceSelectsOnlySettledChannelTasks(t *testing.T) {
 			defer tx.Rollback()
 			require.NoError(t, tx.Create(&[]model.Task{
 				{TaskID: "finance-settled", ChannelId: 2187, Status: model.TaskStatusSuccess, Quota: 400, PrivateData: model.TaskPrivateData{UpstreamTaskID: "provider-settled"}},
+				{TaskID: "finance-second-channel", ChannelId: 2188, Status: model.TaskStatusSuccess, Quota: 600, PrivateData: model.TaskPrivateData{UpstreamTaskID: "provider-second"}},
 				{TaskID: "finance-queued", ChannelId: 2187, Status: model.TaskStatusQueued},
 				{TaskID: "finance-other", ChannelId: 2190, Status: model.TaskStatusSuccess},
 			}).Error)
-			tasks, err := settledSeedanceFinanceTasks(t.Context(), tx, 2187)
+			tasks, err := settledSeedanceFinanceTasks(t.Context(), tx, []int{2187, 2188})
 			require.NoError(t, err)
-			require.Len(t, tasks, 1)
-			assert.Equal(t, "finance-settled", tasks[0].TaskID)
-			assert.Equal(t, "provider-settled", tasks[0].PrivateData.UpstreamTaskID)
-			assert.Equal(t, 400, tasks[0].Quota)
+			require.Len(t, tasks, 2)
+			assert.Equal(t, "finance-second-channel", tasks[0].TaskID)
+			assert.Equal(t, 600, tasks[0].Quota)
+			assert.Equal(t, "finance-settled", tasks[1].TaskID)
+			assert.Equal(t, "provider-settled", tasks[1].PrivateData.UpstreamTaskID)
+			assert.Equal(t, 400, tasks[1].Quota)
 		})
 	}
 }
