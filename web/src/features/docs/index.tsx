@@ -14,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { useApiInfo } from '@/features/dashboard/hooks/use-status-data'
 import { useStatus } from '@/hooks/use-status'
 
 const videoTasksPath = '/api/v3/contents/generations/tasks'
@@ -62,14 +63,16 @@ function ApiCommand(props: { title: string; command: string }) {
 export function ApiDocs() {
   const { t } = useTranslation()
   const { status } = useStatus()
+  const { items: apiAddresses } = useApiInfo()
   const configuredAddress =
     typeof status?.server_address === 'string'
       ? status.server_address.trim()
       : ''
-  const baseURL = (configuredAddress || window.location.origin).replace(
-    /\/+$/,
-    ''
-  )
+  const baseURL = (
+    apiAddresses[0]?.url?.trim() ||
+    configuredAddress ||
+    window.location.origin
+  ).replace(/\/+$/, '')
   const quotedBaseURL = baseURL.replaceAll("'", "'\\''")
   const setupCommand = `export ALLFUN_BASE_URL='${quotedBaseURL}'
 export ALLFUN_API_KEY='YOUR_API_KEY'`
