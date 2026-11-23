@@ -325,7 +325,7 @@ export const meta = {
     en: "Volcengine Doubao Seedance video generation and Seedream image generation",
     zh: "火山引擎豆包 Seedance 视频生成与 Seedream 图片生成",
   },
-  version: "1.5.0",
+  version: "1.5.1",
   author: { name: "QuantumNous" },
   channelTypes: [54, 45], // VolcEngine-type channels serve Ark video models with the same wire format
   models: Object.keys(VIDEO_MODELS).concat(Object.keys(IMAGE_MODELS)),
@@ -793,21 +793,38 @@ export const native = {
     return intent;
   },
   taskCreated: function (ctx, task) {
-    const data = task.data && typeof task.data === "object" && !Array.isArray(task.data) ? task.data : {};
-    return Object.assign({}, data, { id: task.task_id });
+    return { id: task.task_id };
   },
   // Ark's last query reply. Before the first poll the task holds the create
   // reply, {id}, which has no status yet; the gateway can fail a task Ark
   // still reports as queued or running (poll failures or the task timeout).
   taskStatus: function (ctx, task) {
     const statusMap = { NOT_START: "queued", SUBMITTED: "queued", QUEUED: "queued", IN_PROGRESS: "running", SUCCESS: "succeeded", FAILURE: "failed" };
-    const data = task.data && typeof task.data === "object" && !Array.isArray(task.data) ? task.data : {};
-    const output = Object.assign({}, data, { id: task.task_id });
-    if (typeof output.status !== "string") output.status = statusMap[task.status] || "queued";
-    if (task.status === "FAILURE" && (output.status === "queued" || output.status === "running")) {
-      output.status = "failed";
-      output.error = { code: "InternalServiceError", message: task.fail_reason || "task failed" };
+    const data = task.data && typeof task.data === "object" ? task.data : {};
+    const output = { id: task.task_id, status: statusMap[task.status] || "queued" };
+    const model = task.properties && task.properties.origin_model_name;
+    if (model) output.model = model;
+    if (task.status === "FAILURE") {
+      if (data.status === "cancelled" || data.status === "expired") output.status = data.status;
+      output.error = { code: "VideoGenerationFailed", message: "Video generation failed." };
     }
+    const artifacts = (ctx && ctx.artifacts) || {};
+    if (output.status === "succeeded" && artifacts.video) {
+      output.content = { video_url: artifacts.video.url };
+      if (artifacts.last_frame) output.content.last_frame_url = artifacts.last_frame.url;
+      const usage = data.usage || {};
+      output.usage = {};
+      for (const key of ["completion_tokens", "total_tokens"]) {
+        if (Number.isSafeInteger(usage[key]) && usage[key] >= 0) output.usage[key] = usage[key];
+      }
+      if (data.usage_estimated === true) output.usage_estimated = true;
+    }
+    for (const key of ["created_at", "updated_at", "seed", "duration", "framespersecond", "width", "height"]) {
+      if (Number.isSafeInteger(data[key]) && data[key] >= 0) output[key] = data[key];
+    }
+    if (["480p", "720p", "1080p", "4k"].includes(data.resolution)) output.resolution = data.resolution;
+    if (["16:9", "4:3", "1:1", "3:4", "9:16", "21:9", "adaptive"].includes(data.ratio)) output.ratio = data.ratio;
+    if (typeof data.generate_audio === "boolean") output.generate_audio = data.generate_audio;
     return output;
   },
   // Seedream's own body: Base64 images and streamed images come back as Ark
@@ -826,7 +843,8 @@ export const native = {
     return task.data && typeof task.data === "object" && !Array.isArray(task.data) ? task.data : {};
   },
   error: function (ctx, error) {
-    return { error: { code: ERROR_CODES[error.httpStatus] || "InternalServiceError", message: error.message } };
+    const code = ERROR_CODES[error.httpStatus] || "InternalServiceError";
+    return { error: { code: code, message: "The gateway could not complete this request." } };
   },
 };
 
@@ -1006,8 +1024,7 @@ export function parseTaskResult(ctx, body) {
     return result;
   }
   if (body.status === "failed" || body.status === "expired" || body.status === "cancelled") {
-    const reason = body.error && body.error.message ? body.error.message : body.status;
-    return { status: "FAILURE", progress: "100%", reason: reason };
+    return { status: "FAILURE", progress: "100%", reason: "Video generation failed." };
   }
   return { status: "UNKNOWN", reason: "unrecognized status: " + String(body.status || "") };
 }
@@ -1138,7 +1155,7 @@ export const protocols = {
         return { events: events, state: state, done: true };
       }
       if (status === "FAILURE")
-        return { events: [{ type: "error", code: "task_failed", message: task.fail_reason || "task failed" }], state: state, done: true };
+        return { events: [{ type: "error", code: "task_failed", message: "Video generation failed." }], state: state, done: true };
       if (previousState && previousState.status === status && previousState.progress === progress) return { events: [], state: state, done: false };
       const event = { type: "progress", message: status.toLowerCase() };
       if (progress !== null) event.progress = progress;
@@ -1234,7 +1251,6 @@ export const protocols = {
 
 const legacyRenderers = {
   openai_video: function (task) {
-    const data = task.data || {};
     const statusMap = { NOT_START: "queued", SUBMITTED: "queued", QUEUED: "queued", IN_PROGRESS: "in_progress", SUCCESS: "completed", FAILURE: "failed" };
     const output = {
       id: task.task_id,
@@ -1245,7 +1261,7 @@ const legacyRenderers = {
       created_at: task.created_at,
       completed_at: task.updated_at,
     };
-    if (data.status === "failed") output.error = { message: data.error ? data.error.message || "" : "", code: data.error ? data.error.code || "" : "" };
+    if (task.status === "FAILURE") output.error = { message: "Video generation failed.", code: "task_failed" };
     return output;
   },
 };

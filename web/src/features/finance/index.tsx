@@ -1,4 +1,5 @@
-import { Calculator, Database, Plus, Trash2, TrendingDown, TrendingUp } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { Calculator, Database, Plus, RefreshCw, Trash2, TrendingDown, TrendingUp } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -30,7 +31,10 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { toIntlLocale } from '@/i18n/languages'
+import { api } from '@/lib/api'
+import { formatBillingCurrencyFromUSD } from '@/lib/currency'
 import { formatCompactNumber, formatNumber } from '@/lib/format'
+import { requireServerSuccess } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
 
 import {
@@ -44,6 +48,13 @@ import {
 const STORAGE_KEY = 'allfun.finance.entries.v1'
 
 type FinanceDraft = Omit<FinanceEntry, 'id'>
+
+type SeedanceLedger = {
+  configured: boolean
+  limited: boolean
+  pending: number
+  records: Pick<FinanceEntry, 'id' | 'model' | 'port' | 'outputTokens' | 'fixedCost' | 'revenue'>[]
+}
 
 function readEntries(): FinanceEntry[] {
   if (typeof window === 'undefined') return []
@@ -84,7 +95,7 @@ function toNumber(value: string): number {
 }
 
 function money(value: number, locale: Intl.LocalesArgument): string {
-  return `$${formatNumber(value, locale)}`
+  return formatBillingCurrencyFromUSD(value, { locale, digitsLarge: 4, digitsSmall: 6 })
 }
 
 function InputField(props: {
@@ -119,6 +130,15 @@ export function Finance() {
   const [groupBy, setGroupBy] = useState<FinanceGroupBy>('total')
   const [modelFilter, setModelFilter] = useState('')
   const [portFilter, setPortFilter] = useState('')
+  const seedanceLedger = useQuery({
+    queryKey: ['finance', 'seedance'],
+    queryFn: async () => {
+      const { data } = await api.get<{ success: boolean; data: SeedanceLedger }>('/api/finance/seedance')
+      return requireServerSuccess(data).data
+    },
+    staleTime: 60_000,
+    retry: false,
+  })
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(entries))
@@ -127,12 +147,16 @@ export function Finance() {
   const filteredEntries = useMemo(() => {
     const model = modelFilter.trim().toLowerCase()
     const port = portFilter.trim().toLowerCase()
-    return entries.filter(
+    const synced = seedanceLedger.data?.records.map((record) => ({
+      ...EMPTY_FINANCE_ENTRY,
+      ...record,
+    })) ?? []
+    return [...synced, ...entries].filter(
       (entry) =>
         (!model || entry.model.toLowerCase().includes(model)) &&
         (!port || entry.port.toLowerCase().includes(port))
     )
-  }, [entries, modelFilter, portFilter])
+  }, [entries, modelFilter, portFilter, seedanceLedger.data])
 
   const results = useMemo(
     () => filteredEntries.map(calculateFinanceEntry),
@@ -200,6 +224,17 @@ export function Finance() {
     <SectionPageLayout>
       <SectionPageLayout.Title>{t('Finance Accounting')}</SectionPageLayout.Title>
       <SectionPageLayout.Actions>
+        {seedanceLedger.data?.configured && (
+          <Button
+            variant='outline'
+            size='sm'
+            onClick={() => void seedanceLedger.refetch()}
+            disabled={seedanceLedger.isFetching}
+          >
+            <RefreshCw />
+            {t('Sync')}
+          </Button>
+        )}
         <Badge variant='outline' className='border-primary/50 text-primary'>
           <Database className='size-3' />
           {t('Saved in this browser')}
@@ -216,6 +251,22 @@ export function Finance() {
       </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
         <div className='space-y-4'>
+          {seedanceLedger.isError && (
+            <p role='status' className='text-destructive text-sm'>{t('Refresh failed')}</p>
+          )}
+          {seedanceLedger.data?.configured && (
+            <div className='flex flex-wrap gap-2'>
+              <Badge variant='outline'>
+                {t('Synced')} {formatNumber(seedanceLedger.data.records.length, locale)}
+              </Badge>
+              {seedanceLedger.data.pending > 0 && (
+                <Badge variant='outline'>
+                  {t('Pending')} {formatNumber(seedanceLedger.data.pending, locale)}
+                </Badge>
+              )}
+              {seedanceLedger.data.limited && <Badge variant='outline'>{t('Limited')} {formatNumber(200, locale)}</Badge>}
+            </div>
+          )}
           <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
             <MetricCard
               label={t('Revenue')}
@@ -470,14 +521,18 @@ export function Finance() {
                         {money(result.profit, locale)}
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant='ghost'
-                          size='icon-sm'
-                          aria-label={t('Remove record')}
-                          onClick={() => removeEntry(result.id)}
-                        >
-                          <Trash2 />
-                        </Button>
+                        {result.id.startsWith('seedance:') ? (
+                          <span className='text-muted-foreground text-xs'>{t('Synced')}</span>
+                        ) : (
+                          <Button
+                            variant='ghost'
+                            size='icon-sm'
+                            aria-label={t('Remove record')}
+                            onClick={() => removeEntry(result.id)}
+                          >
+                            <Trash2 />
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

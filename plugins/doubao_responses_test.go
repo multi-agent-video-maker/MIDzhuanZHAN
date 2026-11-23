@@ -1146,21 +1146,34 @@ func TestDoubaoNativeOfficialBodies(t *testing.T) {
 	})
 
 	t.Run("query replies", func(t *testing.T) {
+		createdBody, err := call([]string{"native", "taskCreated"}, map[string]any{}, map[string]any{"task_id": "task_pub",
+			"data": map[string]any{"id": "task_private", "url": "https://supplier.example/tasks/task_private"}})
+		require.NoError(t, err)
+		assert.Equal(t, map[string]any{"id": "task_pub"}, createdBody)
 		created, err := call([]string{"native", "taskStatus"}, map[string]any{}, map[string]any{"task_id": "task_pub", "status": "SUBMITTED", "data": map[string]any{"id": "task_pub"}})
 		require.NoError(t, err)
 		assert.Equal(t, map[string]any{"id": "task_pub", "status": "queued"}, created)
-		failed, err := call([]string{"native", "taskStatus"}, map[string]any{}, map[string]any{"task_id": "task_pub", "status": "FAILURE", "fail_reason": "task timed out",
-			"data": map[string]any{"id": "task_pub", "model": seedance, "status": "running"}})
+		success, err := call([]string{"native", "taskStatus"}, map[string]any{"artifacts": map[string]any{
+			"video": map[string]any{"url": "https://relay.example/artifacts/video"},
+		}}, map[string]any{"task_id": "task_pub", "status": "SUCCESS", "properties": map[string]any{"origin_model_name": seedance},
+			"data": map[string]any{"id": "task_private", "status": "succeeded", "content": map[string]any{"video_url": "https://supplier.example/video"},
+				"usage": map[string]any{"total_tokens": 4000, "supplier_url": "https://supplier.example"}}})
 		require.NoError(t, err)
-		assert.Equal(t, map[string]any{"id": "task_pub", "model": seedance, "status": "failed", "error": map[string]any{"code": "InternalServiceError", "message": "task timed out"}}, failed)
+		assert.Equal(t, map[string]any{"id": "task_pub", "status": "succeeded", "model": seedance,
+			"content": map[string]any{"video_url": "https://relay.example/artifacts/video"}, "usage": map[string]any{"total_tokens": float64(4000)}}, success)
+		failed, err := call([]string{"native", "taskStatus"}, map[string]any{}, map[string]any{"task_id": "task_pub", "status": "FAILURE", "fail_reason": "https://supplier.example failed",
+			"properties": map[string]any{"origin_model_name": seedance},
+			"data":       map[string]any{"id": "task_pub", "model": seedance, "status": "running"}})
+		require.NoError(t, err)
+		assert.Equal(t, map[string]any{"id": "task_pub", "model": seedance, "status": "failed", "error": map[string]any{"code": "VideoGenerationFailed", "message": "Video generation failed."}}, failed)
 		for _, status := range []string{"pending", "processing"} {
 			result, err := call([]string{"parseTaskResult"}, map[string]any{}, map[string]any{"status": status})
 			require.NoError(t, err)
 			assert.Equal(t, "UNKNOWN", result["status"], "%s is not an Ark status", status)
 		}
-		rendered, err := call([]string{"native", "error"}, map[string]any{}, map[string]any{"httpStatus": 400, "message": "content is required"})
+		rendered, err := call([]string{"native", "error"}, map[string]any{}, map[string]any{"httpStatus": 400, "message": "https://supplier.example rejected this request"})
 		require.NoError(t, err)
-		assert.Equal(t, map[string]any{"error": map[string]any{"code": "InvalidParameter", "message": "content is required"}}, rendered)
+		assert.Equal(t, map[string]any{"error": map[string]any{"code": "InvalidParameter", "message": "The gateway could not complete this request."}}, rendered)
 	})
 
 	t.Run("Base64 images settle like URLs", func(t *testing.T) {

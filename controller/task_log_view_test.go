@@ -105,6 +105,29 @@ func TestTaskLogDTOReplacesLegacyVideoURLWithAvailabilityFlag(t *testing.T) {
 	assert.Contains(t, string(encoded), "legacy_video_available")
 }
 
+func TestTaskLogDTOHidesSeedanceSupplierFromUsers(t *testing.T) {
+	task := &model.Task{
+		TaskID:     "task_public",
+		Status:     model.TaskStatusFailure,
+		FailReason: "https://supplier.example temporarily unavailable",
+		Data:       []byte(`{"id":"private_id","url":"https://supplier.example/video.mp4"}`),
+		Properties: model.Properties{
+			OriginModelName:   "doubao-seedance-2-0-260128",
+			UpstreamModelName: "supplier-model-name",
+		},
+	}
+	userView := tasksToDto([]*model.Task{task}, false, common.RoleCommonUser)[0]
+	properties, ok := userView.Properties.(model.Properties)
+	require.True(t, ok)
+	assert.Equal(t, task.Properties.OriginModelName, properties.OriginModelName)
+	assert.Empty(t, properties.UpstreamModelName)
+	assert.Empty(t, userView.Data)
+	assert.Equal(t, "Video generation failed.", userView.FailReason)
+	adminView := tasksToDto([]*model.Task{task}, false, common.RoleAdminUser)[0]
+	assert.Equal(t, task.Data, adminView.Data)
+	assert.Equal(t, task.FailReason, adminView.FailReason)
+}
+
 func TestTaskLogDTOKeepsFailureReasonAndDoesNotMarkPluginTaskLegacy(t *testing.T) {
 	failed := &model.Task{
 		TaskID:     "task_failed",

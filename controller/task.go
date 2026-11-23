@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -459,6 +460,15 @@ func tasksToDto(tasks []*model.Task, fillUser bool, viewerRole int) []*dto.TaskD
 			}
 		}
 		item := relay.TaskModel2Dto(task)
+		if viewerRole < common.RoleAdminUser && slices.Contains(seedanceFinanceModels, task.Properties.OriginModelName) {
+			item.Data = nil
+			properties := task.Properties
+			properties.UpstreamModelName = ""
+			item.Properties = properties
+			if task.Status == model.TaskStatusFailure {
+				item.FailReason = "Video generation failed."
+			}
+		}
 		item.LegacyVideoAvailable = legacyVideoAvailable(task)
 		item.ResultDiscarded = task.PrivateData.ResultDiscarded
 		if task.Status == model.TaskStatusSuccess {
