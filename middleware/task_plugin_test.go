@@ -385,6 +385,16 @@ func TestBuildTaskPluginRouteRequestBodyUnion(t *testing.T) {
 	previous := common.GetDiskCacheConfig()
 	common.SetDiskCacheConfig(common.DiskCacheConfig{Enabled: true, ThresholdMB: 0, MaxSizeMB: 16, Path: t.TempDir()})
 	t.Cleanup(func() { common.SetDiskCacheConfig(previous) })
+	t.Run("empty proxied GET with a JSON content type", func(t *testing.T) {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodGet, "/task", io.NopCloser(strings.NewReader("")))
+		c.Request.Header.Set("Content-Type", "application/json")
+		t.Cleanup(func() { common.CleanupBodyStorage(c) })
+		require.EqualValues(t, -1, c.Request.ContentLength)
+		request, err := buildTaskPluginRouteRequest(c)
+		require.NoError(t, err)
+		assert.Equal(t, map[string]any{"kind": string(jsplugin.BodyNone)}, request.Body)
+	})
 	tests := []struct {
 		name        string
 		contentType string

@@ -185,8 +185,12 @@ func reconcileSeedanceFinance(tasks []*model.Task, logs []seedanceFinanceLog, lo
 			ledger.Pending++
 			continue
 		}
+		port := seedanceFinancePath
+		if execution := task.PrivateData.Execution; execution != nil && execution.RequestPath != "" {
+			port = execution.RequestPath
+		}
 		ledger.Records = append(ledger.Records, seedanceFinanceRecord{
-			ID: "seedance:" + task.TaskID, Model: name, Port: seedanceFinancePath,
+			ID: "seedance:" + task.TaskID, Model: name, Port: port,
 			OutputTokens: cost.tokens, FixedCost: float64(cost.quota) / upstreamUnit / exchange,
 			Revenue: float64(task.Quota) / localUnit,
 		})

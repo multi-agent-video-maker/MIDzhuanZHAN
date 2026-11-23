@@ -61,7 +61,9 @@ func TestSeedanceFinanceSelectsOnlySettledChannelTasks(t *testing.T) {
 func TestSeedanceFinanceMatchesByTaskAndNetsRefunds(t *testing.T) {
 	const modelName = "doubao-seedance-2-0-260128"
 	tasks := []*model.Task{
-		{TaskID: "local-a", Quota: 200000, Properties: model.Properties{OriginModelName: modelName}, PrivateData: model.TaskPrivateData{UpstreamTaskID: "up-a"}},
+		{TaskID: "local-a", Quota: 200000, Properties: model.Properties{OriginModelName: modelName}, PrivateData: model.TaskPrivateData{
+			UpstreamTaskID: "up-a", Execution: &model.TaskExecutionSnapshot{RequestPath: "/v1/videos"},
+		}},
 		{TaskID: "local-b", Quota: 200000, Properties: model.Properties{OriginModelName: modelName}, PrivateData: model.TaskPrivateData{UpstreamTaskID: "up-b"}},
 	}
 	logs := []seedanceFinanceLog{
@@ -74,6 +76,7 @@ func TestSeedanceFinanceMatchesByTaskAndNetsRefunds(t *testing.T) {
 	require.Len(t, ledger.Records, 1)
 	assert.Equal(t, 1, ledger.Pending)
 	assert.Equal(t, "seedance:local-a", ledger.Records[0].ID)
+	assert.Equal(t, "/v1/videos", ledger.Records[0].Port)
 	assert.Equal(t, 50000, ledger.Records[0].OutputTokens)
 	assert.InDelta(t, 0.4, ledger.Records[0].Revenue, 0.000001)
 	assert.InDelta(t, 0.4, ledger.Records[0].FixedCost, 0.000001)

@@ -1100,6 +1100,9 @@ func buildTaskPluginRouteRequest(c *gin.Context) (pluginruntime.RouteRequestCont
 		if bytesErr != nil {
 			return requestContext, bytesErr
 		}
+		if c.Request.Method == http.MethodGet && len(raw) == 0 {
+			return requestContext, nil
+		}
 		if !utf8.Valid(raw) {
 			return requestContext, fmt.Errorf("JSON body must be valid UTF-8")
 		}
