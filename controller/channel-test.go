@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -143,6 +144,11 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	}
 
 	endpointType = normalizeChannelTestEndpoint(channel, endpointType)
+	if endpointType == "" && channel.Type == constant.ChannelTypeVolcEngine &&
+		strings.TrimRight(channel.GetBaseURL(), "/") == seedanceRelayOrigin &&
+		slices.Contains(seedanceRelayModels, testModel) && slices.Contains(channel.GetModels(), testModel) {
+		return testSeedanceChannel(ctx, c, channel, testModel)
+	}
 
 	requestPath := "/v1/chat/completions"
 
@@ -884,6 +890,34 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 	}
 
 	return testRequest
+}
+
+// A Seedance connection check uses the upstream catalog to avoid incurring a
+// video generation charge or treating the task model as a chat completion.
+func testSeedanceChannel(ctx context.Context, c *gin.Context, channel *model.Channel, modelName string) testResult {
+	c.Request = httptest.NewRequestWithContext(ctx, http.MethodGet, "/v1/models", nil)
+	key, _, apiErr := channel.GetNextEnabledKey()
+	if apiErr != nil {
+		return testResult{context: c, localErr: apiErr, newAPIError: apiErr}
+	}
+	if strings.TrimSpace(key) == "" {
+		err := common.NewMessage("Upstream request failed")
+		return testResult{context: c, localErr: err, newAPIError: types.NewErrorWithStatusCode(err, types.ErrorCodeChannelNoAvailableKey, http.StatusBadGateway)}
+	}
+	common.SetContextKey(c, constant.ContextKeyChannelKey, key)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	var catalog OpenAIModelsResponse
+	if !readSeedanceRelayJSON(ctx, "/v1/models", key, &catalog) {
+		err := common.NewMessage("Upstream request failed")
+		return testResult{context: c, localErr: err, newAPIError: types.NewErrorWithStatusCode(err, types.ErrorCodeGetChannelFailed, http.StatusBadGateway)}
+	}
+	if !slices.ContainsFunc(catalog.Data, func(item OpenAIModel) bool { return item.ID == modelName }) {
+		err := common.NewMessage("Model not found")
+		return testResult{context: c, localErr: err, newAPIError: types.NewErrorWithStatusCode(err, types.ErrorCodeModelNotFound, http.StatusNotFound)}
+	}
+	return testResult{context: c}
 }
 
 func TestChannel(c *gin.Context) {

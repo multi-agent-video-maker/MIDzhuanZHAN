@@ -1219,7 +1219,14 @@ function TestStatusCell({ result }: { result?: TestResult }) {
     )
   }
 
-  return <StatusBadge label={t('Failed')} variant='danger' copyable={false} />
+  return (
+    <StatusBadge
+      label={t('Failed')}
+      variant='danger'
+      type='text'
+      copyable={false}
+    />
+  )
 }
 
 function TestResultCell({

@@ -4,17 +4,21 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	relaytypes "github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
@@ -324,6 +328,58 @@ func TestResolveChannelTestUserIDUsesRequestUser(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, 2, userID)
+}
+
+type modelCatalogTransport func(*http.Request) (*http.Response, error)
+
+func (transport modelCatalogTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	return transport(request)
+}
+
+func TestSeedanceChannelChecksModelAccessWithoutSubmittingATask(t *testing.T) {
+	testUserID := setupGenericTaskTest(t).UserId
+	require.NoError(t, i18n.Init())
+	service.InitHttpClient()
+	client := service.GetSSRFProtectedHTTPClient()
+	previousTransport := client.Transport
+	t.Cleanup(func() { client.Transport = previousTransport })
+	const modelName = "doubao-seedance-2-0-260128"
+	channel := &model.Channel{
+		Type: constant.ChannelTypeVolcEngine, BaseURL: common.GetPointer("https://rongli.rongliantz.cn"),
+		Models: modelName, Key: "test-catalog-key",
+	}
+	tests := []struct {
+		name   string
+		status int
+		body   string
+		code   relaytypes.ErrorCode
+	}{
+		{name: "advertised", status: 200, body: `{"data":[{"id":"doubao-seedance-2-0-260128"}]}`},
+		{name: "unlisted", status: 200, body: `{"data":[{"id":"doubao-seedance-2-5-260628"}]}`, code: relaytypes.ErrorCodeModelNotFound},
+		{name: "redirect", status: 302, body: `{}`, code: relaytypes.ErrorCodeGetChannelFailed},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var requests int
+			client.Transport = modelCatalogTransport(func(request *http.Request) (*http.Response, error) {
+				requests++
+				assert.Equal(t, http.MethodGet, request.Method)
+				assert.Equal(t, "https://rongli.rongliantz.cn/v1/models", request.URL.String())
+				assert.Equal(t, "Bearer test-catalog-key", request.Header.Get("Authorization"))
+				return &http.Response{StatusCode: test.status, Body: io.NopCloser(strings.NewReader(test.body)), Header: http.Header{"Location": []string{"https://unused.example/catalog"}}}, nil
+			})
+			result := testChannel(t.Context(), channel, testUserID, modelName, "", false)
+			assert.Equal(t, 1, requests)
+			if test.code == "" {
+				require.NoError(t, result.localErr)
+				require.Nil(t, result.newAPIError)
+				return
+			}
+			require.Error(t, result.localErr)
+			require.NotNil(t, result.newAPIError)
+			assert.Equal(t, test.code, result.newAPIError.GetErrorCode())
+		})
+	}
 }
 
 func TestSelectChannelsForAutomaticTestPassiveRecoveryOnlyUsesAutoDisabled(t *testing.T) {

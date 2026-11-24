@@ -181,6 +181,54 @@ func TestDashboardPerfMetricsRequiresAdminReadAccess(t *testing.T) {
 	}
 }
 
+func TestSeedanceFinanceRequiresAdminSession(t *testing.T) {
+	setupRelayRouterTestDB(t)
+	require.NoError(t, model.DB.AutoMigrate(&model.UserSession{}, &model.UserAccessToken{}, &model.AuditLog{}, &model.Option{}))
+	t.Setenv("ALLFUN_SEEDANCE_CHANNEL_IDS", "")
+	t.Setenv("ALLFUN_SEEDANCE_CHANNEL_ID", "")
+	engine := gin.New()
+	SetApiRouter(engine)
+
+	admin := model.User{Username: "finance-admin", AffCode: "finadm", Role: common.RoleAdminUser, Group: "default", Status: common.UserStatusEnabled, AuthVersion: 1}
+	member := model.User{Username: "finance-member", AffCode: "finmem", Role: common.RoleCommonUser, Group: "default", Status: common.UserStatusEnabled, AuthVersion: 1}
+	require.NoError(t, model.DB.Create(&admin).Error)
+	require.NoError(t, model.DB.Create(&member).Error)
+	adminSession, err := service.CreateLoginSession(admin.Id, "password", "", "")
+	require.NoError(t, err)
+	memberSession, err := service.CreateLoginSession(member.Id, "password", "", "")
+	require.NoError(t, err)
+	suffix, err := common.GenerateRandomCharsKey(43)
+	require.NoError(t, err)
+	personalToken := model.AccessTokenPrefix + suffix
+	grant := model.UserAccessToken{Name: "finance-test", TokenHash: model.AccessTokenFingerprint(personalToken), TokenHint: model.AccessTokenHint(personalToken)}
+	require.NoError(t, grant.SetScopes([]string{"billing:read"}))
+	require.NoError(t, model.CreateUserAccessToken(admin.Id, &grant, service.AccessTokenMaxPerUser))
+
+	for _, tc := range []struct {
+		name, token, code string
+		status            int
+	}{
+		{"guest", "", "", http.StatusUnauthorized},
+		{"member session", memberSession.AccessToken, "", http.StatusForbidden},
+		{"admin personal token", personalToken, "AUTH_SESSION_REQUIRED", http.StatusForbidden},
+		{"admin session", adminSession.AccessToken, "", http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/finance/seedance", nil)
+			if tc.token != "" {
+				req.Header.Set("Authorization", "Bearer "+tc.token)
+			}
+			recorder := httptest.NewRecorder()
+			engine.ServeHTTP(recorder, req)
+			assert.Equal(t, tc.status, recorder.Code)
+			assert.Contains(t, recorder.Header().Get("Cache-Control"), "no-store")
+			if tc.code != "" {
+				assert.Contains(t, recorder.Body.String(), tc.code)
+			}
+		})
+	}
+}
+
 func TestAccessTokenCatalogCoversEveryPermission(t *testing.T) {
 	catalog := service.AccessTokenCatalog(1, common.RoleRootUser)
 	scopes := map[string]bool{}

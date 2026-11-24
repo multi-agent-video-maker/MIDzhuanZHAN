@@ -1,6 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
-import { Calculator, Database, Plus, RefreshCw, Trash2, TrendingDown, TrendingUp } from 'lucide-react'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  Calculator,
+  Database,
+  Plus,
+  RefreshCw,
+  Trash2,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react'
+import { useEffect, useId, useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SectionPageLayout } from '@/components/layout'
@@ -40,6 +48,10 @@ import { cn } from '@/lib/utils'
 import {
   calculateFinanceEntry,
   EMPTY_FINANCE_ENTRY,
+  financeMonth,
+  financeUserLabel,
+  isFinanceMonth,
+  isFinanceUserId,
   summarizeFinance,
   type FinanceEntry,
   type FinanceGroupBy,
@@ -53,7 +65,16 @@ type SeedanceLedger = {
   configured: boolean
   limited: boolean
   pending: number
-  records: Pick<FinanceEntry, 'id' | 'model' | 'port' | 'outputTokens' | 'fixedCost' | 'revenue'>[]
+  records: Array<
+    Pick<
+      FinanceEntry,
+      'id' | 'model' | 'port' | 'outputTokens' | 'fixedCost' | 'revenue'
+    > & {
+      userId?: number
+      username?: string
+      settledAt?: number
+    }
+  >
 }
 
 function readEntries(): FinanceEntry[] {
@@ -95,22 +116,28 @@ function toNumber(value: string): number {
 }
 
 function money(value: number, locale: Intl.LocalesArgument): string {
-  return formatBillingCurrencyFromUSD(value, { locale, digitsLarge: 4, digitsSmall: 6 })
+  return formatBillingCurrencyFromUSD(value, {
+    locale,
+    digitsLarge: 4,
+    digitsSmall: 6,
+  })
 }
 
 function InputField(props: {
   label: string
   value: string | number
   onChange: (value: string) => void
-  type?: 'text' | 'number'
+  type?: 'text' | 'number' | 'month'
   step?: string
   min?: string
   placeholder?: string
 }) {
+  const id = useId()
   return (
     <div className='space-y-1.5'>
-      <Label>{props.label}</Label>
+      <Label htmlFor={id}>{props.label}</Label>
       <Input
+        id={id}
         type={props.type ?? 'number'}
         min={props.min}
         step={props.step}
@@ -133,7 +160,10 @@ export function Finance() {
   const seedanceLedger = useQuery({
     queryKey: ['finance', 'seedance'],
     queryFn: async () => {
-      const { data } = await api.get<{ success: boolean; data: SeedanceLedger }>('/api/finance/seedance')
+      const { data } = await api.get<{
+        success: boolean
+        data: SeedanceLedger
+      }>('/api/finance/seedance')
       return requireServerSuccess(data).data
     },
     staleTime: 60_000,
@@ -147,10 +177,14 @@ export function Finance() {
   const filteredEntries = useMemo(() => {
     const model = modelFilter.trim().toLowerCase()
     const port = portFilter.trim().toLowerCase()
-    const synced = seedanceLedger.data?.records.map((record) => ({
-      ...EMPTY_FINANCE_ENTRY,
-      ...record,
-    })) ?? []
+    const synced =
+      seedanceLedger.data?.records.map((record) => ({
+        ...EMPTY_FINANCE_ENTRY,
+        ...record,
+        month: record.settledAt
+          ? financeMonth(record.settledAt * 1000)
+          : undefined,
+      })) ?? []
     return [...synced, ...entries].filter(
       (entry) =>
         (!model || entry.model.toLowerCase().includes(model)) &&
@@ -222,7 +256,9 @@ export function Finance() {
 
   return (
     <SectionPageLayout>
-      <SectionPageLayout.Title>{t('Finance Accounting')}</SectionPageLayout.Title>
+      <SectionPageLayout.Title>
+        {t('Finance Accounting')}
+      </SectionPageLayout.Title>
       <SectionPageLayout.Actions>
         {seedanceLedger.data?.configured && (
           <Button
@@ -252,19 +288,27 @@ export function Finance() {
       <SectionPageLayout.Content>
         <div className='space-y-4'>
           {seedanceLedger.isError && (
-            <p role='status' className='text-destructive text-sm'>{t('Refresh failed')}</p>
+            <p role='status' className='text-destructive text-sm'>
+              {t('Refresh failed')}
+            </p>
           )}
           {seedanceLedger.data?.configured && (
             <div className='flex flex-wrap gap-2'>
               <Badge variant='outline'>
-                {t('Synced')} {formatNumber(seedanceLedger.data.records.length, locale)}
+                {t('Synced')}{' '}
+                {formatNumber(seedanceLedger.data.records.length, locale)}
               </Badge>
               {seedanceLedger.data.pending > 0 && (
                 <Badge variant='outline'>
-                  {t('Pending')} {formatNumber(seedanceLedger.data.pending, locale)}
+                  {t('Pending')}{' '}
+                  {formatNumber(seedanceLedger.data.pending, locale)}
                 </Badge>
               )}
-              {seedanceLedger.data.limited && <Badge variant='outline'>{t('Limited')} {formatNumber(200, locale)}</Badge>}
+              {seedanceLedger.data.limited && (
+                <Badge variant='outline'>
+                  {t('Limited')} {formatNumber(200, locale)}
+                </Badge>
+              )}
             </div>
           )}
           <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
@@ -320,6 +364,30 @@ export function Finance() {
                   onChange={(value) => updateDraft('port', value)}
                 />
                 <InputField
+                  label={t('Month')}
+                  type='month'
+                  value={draft.month ?? ''}
+                  onChange={(value) => updateDraft('month', value)}
+                />
+                <InputField
+                  label={t('User ID')}
+                  value={draft.userId ?? ''}
+                  min='1'
+                  onChange={(value) => {
+                    const userId = Number(value)
+                    updateDraft(
+                      'userId',
+                      isFinanceUserId(userId) ? userId : undefined
+                    )
+                  }}
+                />
+                <InputField
+                  label={t('Username')}
+                  type='text'
+                  value={draft.username ?? ''}
+                  onChange={(value) => updateDraft('username', value)}
+                />
+                <InputField
                   label={t('Requests')}
                   value={draft.requests}
                   min='0'
@@ -364,7 +432,9 @@ export function Finance() {
                   value={draft.fixedCost}
                   min='0'
                   step='0.01'
-                  onChange={(value) => updateDraft('fixedCost', toNumber(value))}
+                  onChange={(value) =>
+                    updateDraft('fixedCost', toNumber(value))
+                  }
                 />
                 <InputField
                   label={t('Revenue (USD)')}
@@ -373,7 +443,10 @@ export function Finance() {
                   step='0.01'
                   onChange={(value) => updateDraft('revenue', toNumber(value))}
                 />
-                <Button className='sm:col-span-2 xl:col-span-1' onClick={addEntry}>
+                <Button
+                  className='sm:col-span-2 xl:col-span-1'
+                  onClick={addEntry}
+                >
                   <Plus />
                   {t('Add record')}
                 </Button>
@@ -383,12 +456,7 @@ export function Finance() {
             <Card>
               <CardHeader className='gap-3 border-b'>
                 <div className='flex flex-wrap items-start justify-between gap-3'>
-                  <div>
-                    <CardTitle>{t('Finance ledger')}</CardTitle>
-                    <CardDescription>
-                      {t('Review calculations by model, port, or total volume.')}
-                    </CardDescription>
-                  </div>
+                  <CardTitle>{t('Finance ledger')}</CardTitle>
                   <Select
                     value={groupBy}
                     onValueChange={(value) =>
@@ -402,6 +470,8 @@ export function Finance() {
                       <SelectItem value='total'>{t('Total volume')}</SelectItem>
                       <SelectItem value='model'>{t('By model')}</SelectItem>
                       <SelectItem value='port'>{t('By port')}</SelectItem>
+                      <SelectItem value='month'>{t('By month')}</SelectItem>
+                      <SelectItem value='user'>{t('By user')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -427,18 +497,30 @@ export function Finance() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>{t('Scope')}</TableHead>
-                      <TableHead className='text-right'>{t('Requests')}</TableHead>
-                      <TableHead className='text-right'>{t('Tokens')}</TableHead>
-                      <TableHead className='text-right'>{t('Revenue')}</TableHead>
+                      <TableHead className='text-right'>
+                        {t('Requests')}
+                      </TableHead>
+                      <TableHead className='text-right'>
+                        {t('Tokens')}
+                      </TableHead>
+                      <TableHead className='text-right'>
+                        {t('Revenue')}
+                      </TableHead>
                       <TableHead className='text-right'>{t('Cost')}</TableHead>
-                      <TableHead className='text-right'>{t('Profit')}</TableHead>
-                      <TableHead className='text-right'>{t('Margin')}</TableHead>
+                      <TableHead className='text-right'>
+                        {t('Profit')}
+                      </TableHead>
+                      <TableHead className='text-right'>
+                        {t('Margin')}
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {groups.map((group) => (
                       <TableRow key={group.key}>
-                        <TableCell className='font-semibold'>{group.key}</TableCell>
+                        <TableCell className='font-semibold'>
+                          {group.label || group.key || '—'}
+                        </TableCell>
                         <TableCell className='text-right'>
                           {formatNumber(group.requests, locale)}
                         </TableCell>
@@ -471,7 +553,10 @@ export function Finance() {
                     ))}
                     {groups.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={7} className='text-muted-foreground h-24 text-center'>
+                        <TableCell
+                          colSpan={7}
+                          className='text-muted-foreground h-24 text-center'
+                        >
                           {t('Add a record to begin calculating.')}
                         </TableCell>
                       </TableRow>
@@ -485,14 +570,13 @@ export function Finance() {
           <Card>
             <CardHeader>
               <CardTitle>{t('Records')}</CardTitle>
-              <CardDescription>
-                {t('Each record keeps model, port, token cost, fixed cost, and revenue.')}
-              </CardDescription>
             </CardHeader>
             <CardContent className='p-0'>
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>{t('Month')}</TableHead>
+                    <TableHead>{t('User')}</TableHead>
                     <TableHead>{t('Model')}</TableHead>
                     <TableHead>{t('Port')}</TableHead>
                     <TableHead className='text-right'>{t('Revenue')}</TableHead>
@@ -504,6 +588,10 @@ export function Finance() {
                 <TableBody>
                   {results.map((result) => (
                     <TableRow key={result.id}>
+                      <TableCell>
+                        {isFinanceMonth(result.month) ? result.month : '—'}
+                      </TableCell>
+                      <TableCell>{financeUserLabel(result)}</TableCell>
                       <TableCell>{result.model}</TableCell>
                       <TableCell>{result.port}</TableCell>
                       <TableCell className='text-right'>
@@ -515,14 +603,18 @@ export function Finance() {
                       <TableCell
                         className={cn(
                           'text-right font-semibold',
-                          result.profit >= 0 ? 'text-success' : 'text-destructive'
+                          result.profit >= 0
+                            ? 'text-success'
+                            : 'text-destructive'
                         )}
                       >
                         {money(result.profit, locale)}
                       </TableCell>
                       <TableCell>
                         {result.id.startsWith('seedance:') ? (
-                          <span className='text-muted-foreground text-xs'>{t('Synced')}</span>
+                          <span className='text-muted-foreground text-xs'>
+                            {t('Synced')}
+                          </span>
                         ) : (
                           <Button
                             variant='ghost'
@@ -563,10 +655,12 @@ function MetricCard(props: {
     <Card className={cn('gap-3 border', toneClass)}>
       <CardContent className='flex items-center justify-between gap-3'>
         <div>
-          <div className='text-muted-foreground text-xs font-medium uppercase tracking-wider'>
+          <div className='text-muted-foreground text-xs font-medium tracking-wider uppercase'>
             {props.label}
           </div>
-          <div className='mt-1 text-2xl font-bold tabular-nums'>{props.value}</div>
+          <div className='mt-1 text-2xl font-bold tabular-nums'>
+            {props.value}
+          </div>
         </div>
         <div className='flex size-9 items-center justify-center rounded-lg border border-current/20'>
           {props.icon}

@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"io"
+	"maps"
 	"math"
 	"net/http"
 	"os"
@@ -20,12 +21,12 @@ import (
 )
 
 const (
-	seedanceFinanceOrigin = "https://rongli.rongliantz.cn"
-	seedanceFinancePath   = "/api/v3/contents/generations/tasks"
-	seedanceFinanceLimit  = 200
+	seedanceRelayOrigin  = "https://rongli.rongliantz.cn"
+	seedanceFinancePath  = "/api/v3/contents/generations/tasks"
+	seedanceFinanceLimit = 200
 )
 
-var seedanceFinanceModels = []string{"doubao-seedance-2-0-260128", "doubao-seedance-2-5-260628"}
+var seedanceRelayModels = []string{"doubao-seedance-2-0-260128", "doubao-seedance-2-5-260628"}
 
 type seedanceFinanceLog struct {
 	Type  int    `json:"type"`
@@ -38,6 +39,9 @@ type seedanceFinanceRecord struct {
 	ID           string  `json:"id"`
 	Model        string  `json:"model"`
 	Port         string  `json:"port"`
+	UserID       int     `json:"userId,omitempty"`
+	Username     string  `json:"username,omitempty"`
+	SettledAt    int64   `json:"settledAt,omitempty"`
 	OutputTokens int     `json:"outputTokens"`
 	FixedCost    float64 `json:"fixedCost"`
 	Revenue      float64 `json:"revenue"`
@@ -70,7 +74,7 @@ func GetSeedanceFinance(c *gin.Context) {
 		}
 		channel, err := model.GetChannelById(channelID, true)
 		if err != nil || channel == nil ||
-			strings.TrimRight(channel.GetBaseURL(), "/") != seedanceFinanceOrigin ||
+			strings.TrimRight(channel.GetBaseURL(), "/") != seedanceRelayOrigin ||
 			channel.ChannelInfo.IsMultiKey || !strings.HasPrefix(channel.Key, "sk-") ||
 			strings.ContainsAny(channel.Key, " \r\n\t") ||
 			(ledgerKey != "" && channel.Key != ledgerKey) {
@@ -93,10 +97,6 @@ func GetSeedanceFinance(c *gin.Context) {
 		return
 	}
 
-	// Read only the dedicated channel key's ledger. Redirects must never carry
-	// the key to another endpoint, even another endpoint on the same host.
-	client := *service.GetSSRFProtectedHTTPClient()
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	var upstreamStatus struct {
 		Success bool `json:"success"`
 		Data    struct {
@@ -109,11 +109,11 @@ func GetSeedanceFinance(c *gin.Context) {
 		Success bool                 `json:"success"`
 		Data    []seedanceFinanceLog `json:"data"`
 	}
-	if !readSeedanceFinanceJSON(ctx, &client, "/api/status", "", &upstreamStatus) ||
+	if !readSeedanceRelayJSON(ctx, "/api/status", "", &upstreamStatus) ||
 		!upstreamStatus.Success || upstreamStatus.Data.DisplayType != "CNY" ||
 		!(upstreamStatus.Data.QuotaPerUnit > 0) || !(upstreamStatus.Data.ExchangeRate > 0) ||
 		!(operation_setting.USDExchangeRate > 0) || !(common.QuotaPerUnit > 0) ||
-		!readSeedanceFinanceJSON(ctx, &client, "/api/log/token", ledgerKey, &upstreamLogs) ||
+		!readSeedanceRelayJSON(ctx, "/api/log/token", ledgerKey, &upstreamLogs) ||
 		!upstreamLogs.Success {
 		common.ApiErrorStatus(c, http.StatusBadGateway, common.NewMessage("Refresh failed"))
 		return
@@ -124,6 +124,9 @@ func GetSeedanceFinance(c *gin.Context) {
 		common.QuotaPerUnit, upstreamStatus.Data.QuotaPerUnit/upstreamStatus.Data.ExchangeRate,
 		operation_setting.USDExchangeRate,
 	)
+	if err := loadSeedanceFinanceUsernames(ctx, model.DB, ledger.Records); err != nil {
+		common.SysError(common.LogText("Failed to load finance usernames: %s", err.Error()))
+	}
 	ledger.Limited = len(tasks) > seedanceFinanceLimit
 	common.ApiSuccess(c, ledger)
 }
@@ -131,7 +134,7 @@ func GetSeedanceFinance(c *gin.Context) {
 func settledSeedanceFinanceTasks(ctx context.Context, db *gorm.DB, channelIDs []int) ([]*model.Task, error) {
 	var tasks []*model.Task
 	err := db.WithContext(ctx).
-		Select("task_id", "properties", "private_data", "quota").
+		Select("task_id", "properties", "private_data", "quota", "user_id", "finish_time").
 		Where("channel_id IN ? AND status = ?", channelIDs, model.TaskStatusSuccess).
 		Order("id DESC").
 		Limit(seedanceFinanceLimit + 1).
@@ -139,14 +142,43 @@ func settledSeedanceFinanceTasks(ctx context.Context, db *gorm.DB, channelIDs []
 	return tasks, err
 }
 
-func readSeedanceFinanceJSON(ctx context.Context, client *http.Client, path, key string, result any) bool {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, seedanceFinanceOrigin+path, nil)
+func loadSeedanceFinanceUsernames(ctx context.Context, db *gorm.DB, records []seedanceFinanceRecord) error {
+	ids := make(map[int]struct{})
+	for _, record := range records {
+		if record.UserID > 0 {
+			ids[record.UserID] = struct{}{}
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+
+	var users []model.User
+	if err := db.WithContext(ctx).Select("id", "username").
+		Where("id IN ?", slices.Collect(maps.Keys(ids))).Find(&users).Error; err != nil {
+		return err
+	}
+	usernames := make(map[int]string, len(users))
+	for _, user := range users {
+		usernames[user.Id] = user.Username
+	}
+	for i := range records {
+		records[i].Username = usernames[records[i].UserID]
+	}
+	return nil
+}
+
+func readSeedanceRelayJSON(ctx context.Context, path, key string, result any) bool {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, seedanceRelayOrigin+path, nil)
 	if err != nil {
 		return false
 	}
 	if key != "" {
 		request.Header.Set("Authorization", "Bearer "+key)
 	}
+	// Keep the dedicated channel key on the intended endpoint.
+	client := *service.GetSSRFProtectedHTTPClient()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	response, err := client.Do(request)
 	if err != nil {
 		return false
@@ -165,7 +197,7 @@ func reconcileSeedanceFinance(tasks []*model.Task, logs []seedanceFinanceLog, lo
 	charges := make(map[chargeKey]charge, len(logs))
 	for _, entry := range logs {
 		if (entry.Type != model.LogTypeConsume && entry.Type != model.LogTypeRefund) ||
-			entry.Quota < 0 || entry.Quota > math.MaxInt32 || !slices.Contains(seedanceFinanceModels, entry.Model) {
+			entry.Quota < 0 || entry.Quota > math.MaxInt32 || !slices.Contains(seedanceRelayModels, entry.Model) {
 			continue
 		}
 		var details struct {
@@ -192,7 +224,7 @@ func reconcileSeedanceFinance(tasks []*model.Task, logs []seedanceFinanceLog, lo
 	ledger := seedanceFinanceLedger{Configured: true, Records: make([]seedanceFinanceRecord, 0, len(tasks))}
 	for _, task := range tasks {
 		name := task.Properties.OriginModelName
-		if !slices.Contains(seedanceFinanceModels, name) {
+		if !slices.Contains(seedanceRelayModels, name) {
 			continue
 		}
 		cost := charges[chargeKey{task.PrivateData.UpstreamTaskID, name}]
@@ -206,6 +238,7 @@ func reconcileSeedanceFinance(tasks []*model.Task, logs []seedanceFinanceLog, lo
 		}
 		ledger.Records = append(ledger.Records, seedanceFinanceRecord{
 			ID: "seedance:" + task.TaskID, Model: name, Port: port,
+			UserID: task.UserId, SettledAt: task.FinishTime,
 			OutputTokens: cost.tokens, FixedCost: float64(cost.quota) / upstreamUnit / exchange,
 			Revenue: float64(task.Quota) / localUnit,
 		})

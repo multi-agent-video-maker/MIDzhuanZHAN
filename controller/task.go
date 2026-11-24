@@ -460,7 +460,7 @@ func tasksToDto(tasks []*model.Task, fillUser bool, viewerRole int) []*dto.TaskD
 			}
 		}
 		item := relay.TaskModel2Dto(task)
-		if viewerRole < common.RoleAdminUser && slices.Contains(seedanceFinanceModels, task.Properties.OriginModelName) {
+		if viewerRole < common.RoleAdminUser && slices.Contains(seedanceRelayModels, task.Properties.OriginModelName) {
 			item.Data = nil
 			properties := task.Properties
 			properties.UpstreamModelName = ""

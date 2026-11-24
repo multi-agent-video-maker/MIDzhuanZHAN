@@ -291,7 +291,7 @@ function renderEmptyState<TData>(
 ) {
   if (props.emptyContent) {
     return (
-      <TableRow>
+      <TableRow interactive={false}>
         <TableCell colSpan={colSpan} className={props.emptyCellClassName}>
           {props.emptyContent}
         </TableCell>

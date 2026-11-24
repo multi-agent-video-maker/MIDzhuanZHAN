@@ -5,11 +5,15 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
@@ -248,4 +252,115 @@ func TestEmailKeyStatusIsDerivedAndReadOnly(t *testing.T) {
 	UpdateOption(context)
 	assert.Contains(t, response.Body.String(), `"success":false`)
 	assert.Contains(t, response.Body.String(), "read-only")
+}
+
+func TestRegistrationEmailVerification(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
+	t.Cleanup(func() { assert.NoError(t, sqlDB.Close()) })
+	require.NoError(t, db.AutoMigrate(&model.User{}))
+	require.NoError(t, i18n.Init())
+	previousDB := model.DB
+	previousRegister, previousPasswordRegister, previousVerification := common.RegisterEnabled, common.PasswordRegisterEnabled, common.EmailVerificationEnabled
+	previousRedis, previousQuota, previousDefaultToken := common.RedisEnabled, common.QuotaForNewUser, constant.GenerateDefaultToken
+	model.DB, common.RedisEnabled, common.QuotaForNewUser, constant.GenerateDefaultToken = db, false, 0, false
+	common.RegisterEnabled, common.PasswordRegisterEnabled, common.EmailVerificationEnabled = true, true, true
+	t.Cleanup(func() {
+		model.DB = previousDB
+		common.RegisterEnabled, common.PasswordRegisterEnabled, common.EmailVerificationEnabled = previousRegister, previousPasswordRegister, previousVerification
+		common.RedisEnabled, common.QuotaForNewUser, constant.GenerateDefaultToken = previousRedis, previousQuota, previousDefaultToken
+	})
+	configureEmailDelivery(t, map[string]string{"EmailProvider": "resend", "ResendApiKey": "test-key", "ResendFrom": "sender@example.com"})
+
+	codePattern := regexp.MustCompile(`<strong>([a-f0-9]{6})</strong>`)
+	deliveredCodes := map[string]string{}
+	http.DefaultTransport = emailHTTPTransport(func(request *http.Request) (*http.Response, error) {
+		var email struct {
+			To   []string `json:"to"`
+			HTML string   `json:"html"`
+		}
+		require.NoError(t, common.DecodeJson(request.Body, &email))
+		require.Len(t, email.To, 1)
+		match := codePattern.FindStringSubmatch(email.HTML)
+		require.Len(t, match, 2)
+		deliveredCodes[email.To[0]] = match[1]
+		if email.To[0] == "send-failure@example.com" {
+			return &http.Response{StatusCode: 500, Body: io.NopCloser(strings.NewReader("{}"))}, nil
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"id":"test-delivery"}`))}, nil
+	})
+
+	engine := gin.New()
+	engine.GET("/verification", SendEmailVerification)
+	engine.POST("/register", Register)
+	send := func(t *testing.T, email string) *httptest.ResponseRecorder {
+		t.Helper()
+		t.Cleanup(func() { common.DeleteKey(model.NormalizeEmail(email), common.EmailVerificationPurpose) })
+		response := httptest.NewRecorder()
+		engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/verification?email="+url.QueryEscape(email), nil))
+		return response
+	}
+	register := func(t *testing.T, name, email, code string) *httptest.ResponseRecorder {
+		t.Helper()
+		body, err := common.Marshal(map[string]any{"username": name, "password": "test-only-passphrase-007", "email": email, "verification_code": code, "role": common.RoleRootUser})
+		require.NoError(t, err)
+		response := httptest.NewRecorder()
+		engine.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/register", strings.NewReader(string(body))))
+		return response
+	}
+
+	t.Run("disabled registration does not send mail", func(t *testing.T) {
+		common.RegisterEnabled = false
+		t.Cleanup(func() { common.RegisterEnabled = true })
+		assert.Contains(t, send(t, "disabled@example.com").Body.String(), `"success":false`)
+		assert.NotContains(t, deliveredCodes, "disabled@example.com")
+	})
+	t.Run("verified signup creates one normal account and prevents replay", func(t *testing.T) {
+		const email = "register@example.com"
+		assert.Contains(t, register(t, "registration-user", email, "").Body.String(), `"success":false`)
+		require.Contains(t, send(t, email).Body.String(), `"success":true`)
+		assert.Equal(t, http.StatusTooManyRequests, send(t, "Register@example.com").Code)
+		code := deliveredCodes[email]
+		require.NotEmpty(t, code)
+		require.Contains(t, register(t, "registration-user", " Register@example.com ", code).Body.String(), `"success":true`)
+		assert.Contains(t, register(t, "replay-user", email, code).Body.String(), "Verification code is incorrect or has expired")
+		var user model.User
+		require.NoError(t, db.Where("email = ?", email).First(&user).Error)
+		assert.Equal(t, common.RoleCommonUser, user.Role)
+		assert.NotEqual(t, "test-only-passphrase-007", user.Password)
+	})
+	t.Run("failed delivery leaves no valid code", func(t *testing.T) {
+		const email = "send-failure@example.com"
+		assert.Contains(t, send(t, email).Body.String(), `"success":false`)
+		code := deliveredCodes[email]
+		require.NotEmpty(t, code)
+		assert.Contains(t, register(t, "send-failure", email, code).Body.String(), "Verification code is incorrect or has expired")
+	})
+	t.Run("a code stops working after five guesses", func(t *testing.T) {
+		const email = "attempts@example.com"
+		require.Contains(t, send(t, email).Body.String(), `"success":true`)
+		code := deliveredCodes[email]
+		require.NotEmpty(t, code)
+		wrong := "000000"
+		if wrong == code {
+			wrong = "ffffff"
+		}
+		for range 5 {
+			assert.Contains(t, register(t, "attempts", email, wrong).Body.String(), `"success":false`)
+		}
+		assert.Contains(t, register(t, "attempts", email, code).Body.String(), "Verification code is incorrect or has expired")
+	})
+	t.Run("a verification code expires without changing the account", func(t *testing.T) {
+		const email = "expired@example.com"
+		require.Contains(t, send(t, email).Body.String(), `"success":true`)
+		previousValidity := common.VerificationValidMinutes
+		common.VerificationValidMinutes = 0
+		t.Cleanup(func() { common.VerificationValidMinutes = previousValidity })
+		code := deliveredCodes[email]
+		require.NotEmpty(t, code)
+		assert.Contains(t, register(t, "expired", email, code).Body.String(), "Verification code is incorrect or has expired")
+	})
 }

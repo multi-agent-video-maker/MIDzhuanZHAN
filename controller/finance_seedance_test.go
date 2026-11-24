@@ -39,16 +39,17 @@ func TestSeedanceFinanceSelectsOnlySettledChannelTasks(t *testing.T) {
 			require.NoError(t, err)
 			sqlDB.SetMaxOpenConns(1)
 			t.Cleanup(func() { assert.NoError(t, sqlDB.Close()) })
-			require.NoError(t, db.AutoMigrate(&model.Task{}))
+			require.NoError(t, db.AutoMigrate(&model.Task{}, &model.User{}))
 			tx := db.Begin()
 			require.NoError(t, tx.Error)
 			defer tx.Rollback()
 			require.NoError(t, tx.Create(&[]model.Task{
-				{TaskID: "finance-settled", ChannelId: 2187, Status: model.TaskStatusSuccess, Quota: 400, PrivateData: model.TaskPrivateData{UpstreamTaskID: "provider-settled"}},
+				{TaskID: "finance-settled", ChannelId: 2187, UserId: 73, FinishTime: 1793462400, Status: model.TaskStatusSuccess, Quota: 400, PrivateData: model.TaskPrivateData{UpstreamTaskID: "provider-settled"}},
 				{TaskID: "finance-second-channel", ChannelId: 2188, Status: model.TaskStatusSuccess, Quota: 600, PrivateData: model.TaskPrivateData{UpstreamTaskID: "provider-second"}},
 				{TaskID: "finance-queued", ChannelId: 2187, Status: model.TaskStatusQueued},
 				{TaskID: "finance-other", ChannelId: 2190, Status: model.TaskStatusSuccess},
 			}).Error)
+			require.NoError(t, tx.Create(&model.User{Id: 73, Username: "finance-user", Password: "hashed-password"}).Error)
 			tasks, err := settledSeedanceFinanceTasks(t.Context(), tx, []int{2187, 2188})
 			require.NoError(t, err)
 			require.Len(t, tasks, 2)
@@ -57,6 +58,11 @@ func TestSeedanceFinanceSelectsOnlySettledChannelTasks(t *testing.T) {
 			assert.Equal(t, "finance-settled", tasks[1].TaskID)
 			assert.Equal(t, "provider-settled", tasks[1].PrivateData.UpstreamTaskID)
 			assert.Equal(t, 400, tasks[1].Quota)
+			assert.Equal(t, 73, tasks[1].UserId)
+			assert.EqualValues(t, 1793462400, tasks[1].FinishTime)
+			records := []seedanceFinanceRecord{{UserID: 73}}
+			require.NoError(t, loadSeedanceFinanceUsernames(t.Context(), tx, records))
+			assert.Equal(t, "finance-user", records[0].Username)
 		})
 	}
 }

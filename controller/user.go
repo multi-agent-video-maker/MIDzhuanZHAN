@@ -239,12 +239,17 @@ func Register(c *gin.Context) {
 		common.ApiErrorT(c, "Invalid input {{error}}", map[string]any{"error": err.Error()})
 		return
 	}
-	if common.EmailVerificationEnabled {
+	requiresEmail := common.EmailVerificationEnabled
+	if requiresEmail {
 		if user.Email == "" || user.VerificationCode == "" {
 			common.ApiErrorT(c, "Email verification is enabled, please enter email address and verification code")
 			return
 		}
-		if !common.VerifyCodeWithKey(user.Email, user.VerificationCode, common.EmailVerificationPurpose) {
+		if _, err := service.ValidateAccountEmail(user.Email); err != nil {
+			writeSecurityOperationError(c, err)
+			return
+		}
+		if !common.CheckRegistrationCode(user.Email, user.VerificationCode) {
 			common.ApiErrorT(c, "Verification code is incorrect or has expired")
 			return
 		}
@@ -258,7 +263,7 @@ func Register(c *gin.Context) {
 		}
 	}
 	emailForExistCheck := ""
-	if common.EmailVerificationEnabled {
+	if requiresEmail {
 		emailForExistCheck = user.Email
 	}
 	exist, err := model.CheckUserExistOrDeleted(user.Username, emailForExistCheck)
@@ -280,7 +285,11 @@ func Register(c *gin.Context) {
 		InviterId:   inviterId,
 		Role:        common.RoleCommonUser, // 明确设置角色为普通用户
 	}
-	if common.EmailVerificationEnabled {
+	if requiresEmail {
+		if !common.ConsumeRegistrationCode(user.Email, user.VerificationCode) {
+			common.ApiErrorT(c, "Verification code is incorrect or has expired")
+			return
+		}
 		cleanUser.Email = user.Email
 	}
 	if err := cleanUser.Insert(inviterId); err != nil {

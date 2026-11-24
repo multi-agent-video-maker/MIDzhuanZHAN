@@ -217,38 +217,38 @@ func GetHomePageContent(c *gin.Context) {
 }
 
 func SendEmailVerification(c *gin.Context) {
+	setAuthNoStore(c)
+	if !common.RegisterEnabled || !common.PasswordRegisterEnabled || !common.EmailVerificationEnabled {
+		common.ApiErrorT(c, "Failed to send verification email")
+		return
+	}
 	email, err := service.ValidateAccountEmail(c.Query("email"))
 	if err != nil {
 		writeSecurityOperationError(c, err)
 		return
 	}
 
-	if model.IsEmailAlreadyTaken(email) {
-		common.ApiErrorT(c, "Email address is already in use")
-		return
-	}
-	code := common.GenerateVerificationCode(6)
-	common.RegisterVerificationCodeWithKey(email, code, common.EmailVerificationPurpose)
 	// The address may not belong to an account yet, so the mail follows the
-	// request language.
+	// request language. Check account availability only after ownership proof.
 	systemName := map[string]any{"SystemName": common.SystemName}
 	subject := i18n.T(c, i18n.MsgEmailVerificationSubject, systemName)
-	content := fmt.Sprintf("<p>%s</p>"+
-		"<p>%s</p>"+
-		"<p>%s</p>",
-		i18n.T(c, i18n.MsgEmailVerificationGreeting, systemName),
-		i18n.T(c, i18n.MsgEmailVerificationCode, map[string]any{"Code": code}),
-		i18n.T(c, i18n.MsgEmailVerificationValidity, map[string]any{"Minutes": common.VerificationValidMinutes}))
-	err = common.SendEmail(subject, email, content)
+	sent, err := common.SendRegistrationCode(email, func(code string) error {
+		content := fmt.Sprintf("<p>%s</p><p>%s</p><p>%s</p>",
+			i18n.T(c, i18n.MsgEmailVerificationGreeting, systemName),
+			i18n.T(c, i18n.MsgEmailVerificationCode, map[string]any{"Code": code}),
+			i18n.T(c, i18n.MsgEmailVerificationValidity, map[string]any{"Minutes": common.VerificationValidMinutes}))
+		return common.SendEmail(subject, email, content)
+	})
 	if err != nil {
-		common.ApiError(c, err)
+		logger.LogWarn(c.Request.Context(), common.LogText("Registration email delivery failed (%T)", err))
+		common.ApiErrorT(c, "Failed to send verification email")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-	})
-	return
+	if !sent {
+		common.ApiErrorStatus(c, http.StatusTooManyRequests, common.NewMessage("Please wait before requesting another verification code."))
+		return
+	}
+	common.ApiSuccess(c, nil)
 }
 
 func SendPasswordResetEmail(c *gin.Context) {
