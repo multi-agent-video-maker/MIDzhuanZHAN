@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import {
   Calculator,
   Database,
@@ -260,6 +261,14 @@ export function Finance() {
         {t('Finance Accounting')}
       </SectionPageLayout.Title>
       <SectionPageLayout.Actions>
+        <Button
+          variant='outline'
+          size='sm'
+          nativeButton={false}
+          render={<Link to='/finance-exchange' />}
+        >
+          <Calculator /> {t('Exchange finance')}
+        </Button>
         {seedanceLedger.data?.configured && (
           <Button
             variant='outline'

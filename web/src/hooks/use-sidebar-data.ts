@@ -32,6 +32,7 @@ import {
   ServerCog,
   Settings,
   ShieldCheck,
+  ShoppingBag,
   Ticket,
   User,
   Users,
@@ -108,6 +109,11 @@ export function useSidebarData(badges: SidebarBadges = {}): SidebarData {
         title: t('Personal'),
         items: [
           {
+            title: t('Purchase & redeem'),
+            url: '/exchange',
+            icon: ShoppingBag,
+          },
+          {
             title: t('Wallet'),
             url: '/wallet',
             icon: Wallet,
@@ -156,6 +162,7 @@ export function useSidebarData(badges: SidebarBadges = {}): SidebarData {
           {
             title: t('Finance Accounting'),
             url: '/finance',
+            activeUrls: ['/finance-exchange'],
             icon: Calculator,
             requiredRole: ROLE.ADMIN,
           },

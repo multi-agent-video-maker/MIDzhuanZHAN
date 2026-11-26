@@ -95,7 +95,7 @@ function sidebarFor(admin?: object, user?: object, canConfigure = true) {
 }
 
 describe('security sidebar visibility', () => {
-  it('old configurations show Security & Access immediately after Profile and keep API Keys', () => {
+  it('old configurations show the purchase entry and keep the existing personal and API key links', () => {
     const { result } = sidebarFor(
       { personal: { enabled: true, personal: true, topup: true } },
       { personal: { enabled: true, personal: true } }
@@ -104,7 +104,7 @@ describe('security sidebar visibility', () => {
       result.current
         .find((group) => group.id === 'personal')
         ?.items.map((item) => item.title)
-    ).toEqual(['Wallet', 'Profile', 'Security & Access'])
+    ).toEqual(['Purchase & redeem', 'Wallet', 'Profile', 'Security & Access'])
     expect(
       result.current
         .flatMap((group) => group.items)

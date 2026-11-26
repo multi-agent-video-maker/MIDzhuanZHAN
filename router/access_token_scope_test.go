@@ -229,6 +229,46 @@ func TestSeedanceFinanceRequiresAdminSession(t *testing.T) {
 	}
 }
 
+func TestExchangeRoutesRequireDashboardSessions(t *testing.T) {
+	setupRelayRouterTestDB(t)
+	require.NoError(t, model.DB.AutoMigrate(&model.UserSession{}, &model.Option{}))
+	t.Setenv("ALLFUN_EXCHANGE_SHOP_URL", "")
+	t.Setenv("ALLFUN_EXCHANGE_FINANCE_URL", "")
+	engine := gin.New()
+	SetApiRouter(engine)
+	member := model.User{Username: "exchange-member", AffCode: "shopmem", Role: common.RoleCommonUser, Group: "default", Status: common.UserStatusEnabled, AuthVersion: 1}
+	admin := model.User{Username: "exchange-admin", AffCode: "shopadm", Role: common.RoleAdminUser, Group: "default", Status: common.UserStatusEnabled, AuthVersion: 1}
+	require.NoError(t, model.DB.Create(&member).Error)
+	require.NoError(t, model.DB.Create(&admin).Error)
+	memberSession, err := service.CreateLoginSession(member.Id, "password", "", "")
+	require.NoError(t, err)
+	adminSession, err := service.CreateLoginSession(admin.Id, "password", "", "")
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name, path, bearer string
+		status             int
+	}{
+		{"anonymous catalog", "/api/exchange/products", "", http.StatusUnauthorized},
+		{"member catalog", "/api/exchange/products", memberSession.AccessToken, http.StatusOK},
+		{"member finance", "/api/finance/exchange", memberSession.AccessToken, http.StatusForbidden},
+		{"admin finance", "/api/finance/exchange", adminSession.AccessToken, http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			if tc.bearer != "" {
+				req.Header.Set("Authorization", "Bearer "+tc.bearer)
+			}
+			recorder := httptest.NewRecorder()
+			engine.ServeHTTP(recorder, req)
+			assert.Equal(t, tc.status, recorder.Code)
+			assert.Contains(t, recorder.Header().Get("Cache-Control"), "no-store")
+			if tc.status == http.StatusOK {
+				assert.Contains(t, recorder.Body.String(), `"configured":false`)
+			}
+		})
+	}
+}
+
 func TestAccessTokenCatalogCoversEveryPermission(t *testing.T) {
 	catalog := service.AccessTokenCatalog(1, common.RoleRootUser)
 	scopes := map[string]bool{}
