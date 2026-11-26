@@ -3607,6 +3607,7 @@
     "Key Fingerprint": "Empreinte de clé",
     "Key format": "Format de la clé",
     "Key index out of range": "Index de clé hors limites",
+    "Key purchases are paused until payment instructions are configured.": "L’achat de clés est suspendu tant que les instructions de paiement ne sont pas configurées.",
     "Key purchases are temporarily closed.": "L’achat de clés est temporairement fermé.",
     "Key Sources": "Sources de clé",
     "Key Summary": "Résumé de clé",

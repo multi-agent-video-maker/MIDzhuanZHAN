@@ -46,6 +46,7 @@ import { formatCompactNumber, formatNumber } from '@/lib/format'
 import { requireServerSuccess } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
 
+import { ExchangeBalances } from './exchange-balances'
 import {
   calculateFinanceEntry,
   EMPTY_FINANCE_ENTRY,
@@ -296,6 +297,7 @@ export function Finance() {
       </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
         <div className='space-y-4'>
+          <ExchangeBalances />
           {seedanceLedger.isError && (
             <p role='status' className='text-destructive text-sm'>
               {t('Refresh failed')}

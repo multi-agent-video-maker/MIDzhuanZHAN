@@ -3607,6 +3607,7 @@
     "Key Fingerprint": "Key 指紋",
     "Key format": "金鑰格式",
     "Key index out of range": "金鑰索引超出範圍",
+    "Key purchases are paused until payment instructions are configured.": "商城尚未設定付款說明，暫時無法購買 Key。",
     "Key purchases are temporarily closed.": "暫未開放購買 Key。",
     "Key Sources": "Key 來源",
     "Key Summary": "Key 摘要",

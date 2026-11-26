@@ -3607,6 +3607,7 @@
     "Key Fingerprint": "Отпечаток ключа",
     "Key format": "Формат ключа",
     "Key index out of range": "Индекс ключа вне диапазона",
+    "Key purchases are paused until payment instructions are configured.": "Покупка ключей приостановлена до настройки инструкции по оплате.",
     "Key purchases are temporarily closed.": "Покупка ключей временно закрыта.",
     "Key Sources": "Источники ключей",
     "Key Summary": "Сводка ключа",

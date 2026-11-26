@@ -52,7 +52,9 @@ describe('exchange purchase and redemption', () => {
     })
     renderExchange(<ExchangePurchase userId={21} onRedeem={() => {}} />)
     expect(
-      await screen.findByText('Key purchases are temporarily closed.')
+      await screen.findByText(
+        'Key purchases are paused until payment instructions are configured.'
+      )
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Create order' })).toBeDisabled()
     fireEvent.change(screen.getByLabelText('Order number'), {

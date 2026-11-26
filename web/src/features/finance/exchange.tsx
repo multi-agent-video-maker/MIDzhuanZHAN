@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { ArrowLeft, MessageSquare, RefreshCw, Ticket } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
@@ -28,7 +28,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { getExchange, type ExchangeKind } from '@/features/exchange/api'
 import { toIntlLocale } from '@/i18n/languages'
 import { api } from '@/lib/api'
 import { formatNumber } from '@/lib/format'
@@ -37,37 +36,11 @@ import {
   requireServerSuccess,
 } from '@/lib/server-error-message'
 
-type ChannelTotals = {
-  revenue_cents: number
-  cost_cents: number
-  revenue_count: number
-  cost_count: number
-  profit_cents: number | null
-  missing: number
-  orders: number
-}
-
-type FinanceLine = {
-  id: string
-  channel: ExchangeKind
-  confirmed_at: string
-  name: string
-  cost_cents: number | null
-  actual_cost_cents: number | null
-  manual_cost_cents: number | null
-  revenue_cents: number | null
-  profit_cents: number | null
-}
-
-type FinanceBalance = { currency: 'USD'; cents: number }
-type FinanceLedger = {
-  configured: boolean
-  sms_balance: FinanceBalance | null
-  membership_balance: FinanceBalance | null
-  limited: boolean
-  totals: Record<ExchangeKind, ChannelTotals> | null
-  lines: FinanceLine[] | null
-}
+import {
+  EXCHANGE_PROVIDERS,
+  useExchangeLedger,
+  type ExchangeFinanceLine,
+} from './exchange-ledger'
 
 function parseAmount(value: string): number | null | undefined {
   const amount = value.trim().replace(',', '.')
@@ -82,16 +55,8 @@ export function ExchangeFinance() {
   const { t, i18n } = useTranslation()
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const [month, setMonth] = useState('')
-  const [editing, setEditing] = useState<FinanceLine | null>(null)
-  const ledger = useQuery({
-    queryKey: ['finance', 'exchange', month],
-    queryFn: ({ signal }) =>
-      getExchange<FinanceLedger>('/api/finance/exchange', {
-        signal,
-        params: { month },
-      }),
-    retry: false,
-  })
+  const [editing, setEditing] = useState<ExchangeFinanceLine | null>(null)
+  const ledger = useExchangeLedger(month)
   const formatter = new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: 'USD',
@@ -206,7 +171,7 @@ export function ExchangeFinance() {
                       <CardHeader className='gap-2'>
                         <CardTitle className='flex items-center gap-2'>
                           <channel.icon className='text-primary size-4' />{' '}
-                          {channel.title}
+                          {EXCHANGE_PROVIDERS[channel.kind]} · {channel.title}
                         </CardTitle>
                         <p className='text-muted-foreground text-sm'>
                           {t('Orders')}{' '}
@@ -335,7 +300,7 @@ export function ExchangeFinance() {
 }
 
 function ExchangeAmountsDialog(props: {
-  line: FinanceLine
+  line: ExchangeFinanceLine
   onClose: () => void
 }) {
   const { t } = useTranslation()

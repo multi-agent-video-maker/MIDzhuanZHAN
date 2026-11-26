@@ -296,7 +296,9 @@ export function ExchangePurchase(props: {
           {catalog.data?.configured && !catalog.data.ordering_open && (
             <Alert>
               <AlertDescription>
-                {t('Key purchases are temporarily closed.')}
+                {t(
+                  'Key purchases are paused until payment instructions are configured.'
+                )}
               </AlertDescription>
             </Alert>
           )}
