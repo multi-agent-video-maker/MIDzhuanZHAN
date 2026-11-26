@@ -140,7 +140,7 @@ export function ExchangeRedeem(props: { initialKey: string; active: boolean }) {
               </p>
             )}
             <Button type='submit' disabled={!canRedeem || redeem.isPending}>
-              <KeyRound /> {t('Redeem')}
+              <KeyRound /> {t('Redeem a key')}
             </Button>
           </form>
         )}

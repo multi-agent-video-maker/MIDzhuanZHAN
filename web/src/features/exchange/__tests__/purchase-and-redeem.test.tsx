@@ -72,9 +72,9 @@ describe('exchange purchase and redemption', () => {
       })
     const key = `mem_${'a'.repeat(48)}`
     renderExchange(<ExchangeRedeem initialKey={key} active />)
-    fireEvent.click(screen.getByRole('button', { name: 'Redeem' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Redeem a key' }))
     await screen.findByRole('alert')
-    fireEvent.click(screen.getByRole('button', { name: 'Redeem' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Redeem a key' }))
     await waitFor(() =>
       expect(
         screen.getByRole('textbox', { name: 'Membership voucher' })

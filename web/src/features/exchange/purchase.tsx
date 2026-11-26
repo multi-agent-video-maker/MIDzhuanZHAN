@@ -197,7 +197,7 @@ export function ExchangePurchase(props: {
               <Button
                 onClick={() => props.onRedeem(details.delivery?.key ?? '')}
               >
-                <KeyRound /> {t('Redeem')}
+                <KeyRound /> {t('Redeem a key')}
               </Button>
             </div>
           )}

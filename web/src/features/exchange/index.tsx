@@ -31,7 +31,7 @@ export function Exchange() {
               <ShoppingBag /> {t('Buy keys')}
             </TabsTrigger>
             <TabsTrigger value='redeem' className='px-3'>
-              <KeyRound /> {t('Redeem')}
+              <KeyRound /> {t('Redeem a key')}
             </TabsTrigger>
           </TabsList>
           <TabsContent value='buy' keepMounted>
