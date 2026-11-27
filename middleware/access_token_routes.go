@@ -47,6 +47,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/finance/seedance":                accessTokenSessionRule,
 	"GET /api/finance/exchange":                accessTokenSessionRule,
 	"PUT /api/finance/exchange/:id":            accessTokenSessionRule,
+	"POST /api/exchange/admin/sms/keys":        accessTokenSessionRule,
 	"GET /api/exchange/products":               accessTokenSessionRule,
 	"GET /api/exchange/orders/:id":             accessTokenSessionRule,
 	"POST /api/exchange/orders":                accessTokenSessionRule,

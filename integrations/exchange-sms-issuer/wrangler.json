@@ -1,0 +1,11 @@
+{
+  "name": "allfun-sms-issuer-bridge",
+  "pages_build_output_dir": "pages",
+  "compatibility_date": "2026-10-19",
+  "services": [
+    {
+      "binding": "ISSUER",
+      "service": "allfun-sms-issuer"
+    }
+  ]
+}

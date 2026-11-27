@@ -33,6 +33,8 @@ func SetApiRouter(router *gin.Engine) {
 		financeExchange := apiRouter.Group("/finance/exchange", middleware.DisableCache(), middleware.AdminAuth())
 		financeExchange.GET("", controller.GetExchangeFinance)
 		financeExchange.PUT("/:id", anonymousRequestBodyLimit, controller.PutExchangeFinanceAmounts)
+		apiRouter.POST("/exchange/admin/sms/keys", middleware.DisableCache(), middleware.AdminAuth(),
+			anonymousRequestBodyLimit, middleware.UserCriticalRateLimit("exchange-sms-issue"), controller.IssueExchangeSMSKey)
 		exchange := apiRouter.Group("/exchange", middleware.DisableCache(), middleware.UserAuth())
 		exchangeWriteLimit := middleware.UserCriticalRateLimit("exchange")
 		exchange.GET("/products", controller.GetExchangeProducts)

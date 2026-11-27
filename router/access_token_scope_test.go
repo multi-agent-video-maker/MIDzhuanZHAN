@@ -231,9 +231,11 @@ func TestSeedanceFinanceRequiresAdminSession(t *testing.T) {
 
 func TestExchangeRoutesRequireDashboardSessions(t *testing.T) {
 	setupRelayRouterTestDB(t)
-	require.NoError(t, model.DB.AutoMigrate(&model.UserSession{}, &model.Option{}))
+	require.NoError(t, model.DB.AutoMigrate(&model.UserSession{}, &model.UserAccessToken{}, &model.AuditLog{}, &model.Option{}))
 	t.Setenv("ALLFUN_EXCHANGE_SHOP_URL", "")
 	t.Setenv("ALLFUN_EXCHANGE_FINANCE_URL", "")
+	t.Setenv("ALLFUN_EXCHANGE_SMS_ISSUE_URL", "")
+	t.Setenv("ALLFUN_EXCHANGE_SMS_ISSUE_KEY", "")
 	engine := gin.New()
 	SetApiRouter(engine)
 	member := model.User{Username: "exchange-member", AffCode: "shopmem", Role: common.RoleCommonUser, Group: "default", Status: common.UserStatusEnabled, AuthVersion: 1}
@@ -244,17 +246,33 @@ func TestExchangeRoutesRequireDashboardSessions(t *testing.T) {
 	require.NoError(t, err)
 	adminSession, err := service.CreateLoginSession(admin.Id, "password", "", "")
 	require.NoError(t, err)
+	patSuffix, err := common.GenerateRandomCharsKey(43)
+	require.NoError(t, err)
+	adminPAT := model.AccessTokenPrefix + patSuffix
+	grant := model.UserAccessToken{Name: "exchange-test", TokenHash: model.AccessTokenFingerprint(adminPAT), TokenHint: model.AccessTokenHint(adminPAT)}
+	require.NoError(t, grant.SetScopes([]string{"billing:read"}))
+	require.NoError(t, model.CreateUserAccessToken(admin.Id, &grant, service.AccessTokenMaxPerUser))
 	for _, tc := range []struct {
-		name, path, bearer string
-		status             int
+		name, method, path, bearer string
+		status                     int
 	}{
-		{"anonymous catalog", "/api/exchange/products", "", http.StatusUnauthorized},
-		{"member catalog", "/api/exchange/products", memberSession.AccessToken, http.StatusOK},
-		{"member finance", "/api/finance/exchange", memberSession.AccessToken, http.StatusForbidden},
-		{"admin finance", "/api/finance/exchange", adminSession.AccessToken, http.StatusOK},
+		{"anonymous catalog", http.MethodGet, "/api/exchange/products", "", http.StatusUnauthorized},
+		{"member catalog", http.MethodGet, "/api/exchange/products", memberSession.AccessToken, http.StatusOK},
+		{"member finance", http.MethodGet, "/api/finance/exchange", memberSession.AccessToken, http.StatusForbidden},
+		{"admin finance", http.MethodGet, "/api/finance/exchange", adminSession.AccessToken, http.StatusOK},
+		{"anonymous SMS issuance", http.MethodPost, "/api/exchange/admin/sms/keys", "", http.StatusUnauthorized},
+		{"member SMS issuance", http.MethodPost, "/api/exchange/admin/sms/keys", memberSession.AccessToken, http.StatusForbidden},
+		{"personal token SMS issuance", http.MethodPost, "/api/exchange/admin/sms/keys", adminPAT, http.StatusForbidden},
+		{"unconfigured SMS issuance", http.MethodPost, "/api/exchange/admin/sms/keys", adminSession.AccessToken, http.StatusBadGateway},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			var req *http.Request
+			if tc.method == http.MethodPost {
+				req = httptest.NewRequest(tc.method, tc.path, strings.NewReader(`{"request_id":"018e53ff-857e-46ba-95be-62c74a71330d","name":"SMS test"}`))
+				req.Header.Set("Content-Type", "application/json")
+			} else {
+				req = httptest.NewRequest(tc.method, tc.path, nil)
+			}
 			if tc.bearer != "" {
 				req.Header.Set("Authorization", "Bearer "+tc.bearer)
 			}

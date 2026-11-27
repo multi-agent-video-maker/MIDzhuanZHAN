@@ -155,6 +155,12 @@ export function useSidebarData(badges: SidebarBadges = {}): SidebarData {
             icon: Ticket,
           },
           {
+            title: t('SMS key issuance'),
+            url: '/sms-key-issuer',
+            icon: Key,
+            requiredRole: ROLE.ADMIN,
+          },
+          {
             title: t('Subscriptions'),
             url: '/subscriptions',
             icon: CreditCard,

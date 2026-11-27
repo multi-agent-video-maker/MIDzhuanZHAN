@@ -31,6 +31,7 @@ import { Route as AuthenticatedChat2linkRouteImport } from './routes/_authentica
 import { Route as AuthenticatedExchangeRouteImport } from './routes/_authenticated/exchange'
 import { Route as AuthenticatedFinanceRouteImport } from './routes/_authenticated/finance'
 import { Route as AuthenticatedFinanceExchangeRouteImport } from './routes/_authenticated/finance-exchange'
+import { Route as AuthenticatedSmsKeyIssuerRouteImport } from './routes/_authenticated/sms-key-issuer'
 import { Route as AuthenticatedSystemSettingsRouteRouteImport } from './routes/_authenticated/system-settings/route'
 import { Route as AboutIndexRouteImport } from './routes/about/index'
 import { Route as OauthProviderRouteImport } from './routes/oauth/$provider'
@@ -185,6 +186,12 @@ const AuthenticatedFinanceExchangeRoute =
   AuthenticatedFinanceExchangeRouteImport.update({
     id: '/finance-exchange',
     path: '/finance-exchange',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSmsKeyIssuerRoute =
+  AuthenticatedSmsKeyIssuerRouteImport.update({
+    id: '/sms-key-issuer',
+    path: '/sms-key-issuer',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedSystemSettingsRouteRoute =
@@ -476,6 +483,7 @@ export interface FileRoutesByFullPath {
   '/exchange': typeof AuthenticatedExchangeRoute
   '/finance': typeof AuthenticatedFinanceRoute
   '/finance-exchange': typeof AuthenticatedFinanceExchangeRoute
+  '/sms-key-issuer': typeof AuthenticatedSmsKeyIssuerRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about/': typeof AboutIndexRoute
   '/pricing/': typeof PricingIndexRoute
@@ -543,6 +551,7 @@ export interface FileRoutesByTo {
   '/exchange': typeof AuthenticatedExchangeRoute
   '/finance': typeof AuthenticatedFinanceRoute
   '/finance-exchange': typeof AuthenticatedFinanceExchangeRoute
+  '/sms-key-issuer': typeof AuthenticatedSmsKeyIssuerRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about': typeof AboutIndexRoute
   '/pricing': typeof PricingIndexRoute
@@ -614,6 +623,7 @@ export interface FileRoutesById {
   '/_authenticated/exchange': typeof AuthenticatedExchangeRoute
   '/_authenticated/finance': typeof AuthenticatedFinanceRoute
   '/_authenticated/finance-exchange': typeof AuthenticatedFinanceExchangeRoute
+  '/_authenticated/sms-key-issuer': typeof AuthenticatedSmsKeyIssuerRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about/': typeof AboutIndexRoute
   '/pricing/': typeof PricingIndexRoute
@@ -684,6 +694,7 @@ export interface FileRouteTypes {
     | '/exchange'
     | '/finance'
     | '/finance-exchange'
+    | '/sms-key-issuer'
     | '/oauth/$provider'
     | '/about/'
     | '/pricing/'
@@ -751,6 +762,7 @@ export interface FileRouteTypes {
     | '/exchange'
     | '/finance'
     | '/finance-exchange'
+    | '/sms-key-issuer'
     | '/oauth/$provider'
     | '/about'
     | '/pricing'
@@ -821,6 +833,7 @@ export interface FileRouteTypes {
     | '/_authenticated/exchange'
     | '/_authenticated/finance'
     | '/_authenticated/finance-exchange'
+    | '/_authenticated/sms-key-issuer'
     | '/oauth/$provider'
     | '/about/'
     | '/pricing/'
@@ -1042,6 +1055,13 @@ declare module '@tanstack/react-router' {
       path: '/finance-exchange'
       fullPath: '/finance-exchange'
       preLoaderRoute: typeof AuthenticatedFinanceExchangeRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/sms-key-issuer': {
+      id: '/_authenticated/sms-key-issuer'
+      path: '/sms-key-issuer'
+      fullPath: '/sms-key-issuer'
+      preLoaderRoute: typeof AuthenticatedSmsKeyIssuerRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system-settings': {
@@ -1464,6 +1484,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedExchangeRoute: typeof AuthenticatedExchangeRoute
   AuthenticatedFinanceRoute: typeof AuthenticatedFinanceRoute
   AuthenticatedFinanceExchangeRoute: typeof AuthenticatedFinanceExchangeRoute
+  AuthenticatedSmsKeyIssuerRoute: typeof AuthenticatedSmsKeyIssuerRoute
   AuthenticatedChatChatIdRoute: typeof AuthenticatedChatChatIdRoute
   AuthenticatedDashboardSectionRoute: typeof AuthenticatedDashboardSectionRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
@@ -1494,6 +1515,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedExchangeRoute: AuthenticatedExchangeRoute,
   AuthenticatedFinanceRoute: AuthenticatedFinanceRoute,
   AuthenticatedFinanceExchangeRoute: AuthenticatedFinanceExchangeRoute,
+  AuthenticatedSmsKeyIssuerRoute: AuthenticatedSmsKeyIssuerRoute,
   AuthenticatedChatChatIdRoute: AuthenticatedChatChatIdRoute,
   AuthenticatedDashboardSectionRoute: AuthenticatedDashboardSectionRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
